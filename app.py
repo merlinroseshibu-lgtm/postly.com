@@ -208,106 +208,17 @@ with col_metrics:
         health_metric.markdown('<div class="metric-card"><div class="metric-title">Health Score</div><div class="metric-value">100%</div><div class="metric-subtitle">Ergonomic rating</div></div>', unsafe_allow_html=True)
 
 # 6. RUN WEBCAM WITH DISTANCE, POSTURE, & BREAK TIMER LOGIC
+# 6. RUN WEBCAM WITH DISTANCE, POSTURE, & BREAK TIMER LOGIC
 if st.session_state.camera_running:
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    import os
+    import urllib.request
     
-    if face_cascade.empty():
-        import urllib.request
+    xml_path = "haarcascade_frontalface_default.xml"
+    if not os.path.exists(xml_path):
         url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
-        urllib.request.urlretrieve(url, "haarcascade_frontalface_default.xml")
-        face_cascade = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
-
-    cap = cv2.VideoCapture(int(camera_id))
-    
-    if not cap.isOpened() or face_cascade.empty():
-        st.error("❌ Could not open camera or load face detection model.")
-        st.session_state.camera_running = False
-    else:
-        last_beep_time = 0
+        urllib.request.urlretrieve(url, xml_path)
         
-        while cap.isOpened() and st.session_state.camera_running:
-            success, frame = cap.read()
-            if not success:
-                break
-            
-            frame = cv2.flip(frame, 1)
-            height, width_frame, _ = frame.shape
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(50, 50))
-            
-            # Check 20-Minute Break Timer (1200 seconds)
-            time_since_break = time.time() - st.session_state.last_break_time
-            if time_since_break > 1200:
-                st.session_state.break_reminders_count += 1
-                st.session_state.last_break_time = time.time()
-
-            elapsed_sec = int(time.time() - st.session_state.session_start_time) if st.session_state.session_start_time else 0
-            mins, secs = divmod(elapsed_sec, 60)
-            time_str = f"{mins:02d}:{secs:02d}"
-
-            if len(faces) > 0:
-                st.session_state.total_frames += 1
-                (x, y, w, h) = max(faces, key=lambda f: f[2] * f[3])
-                face_center_y = y + (h // 2)
-                
-                vertical_drift = face_center_y - (height / 2)
-                is_slumping = vertical_drift > 80
-                is_too_close = w > distance_threshold
-                
-                if time_since_break > 1180: # Prompt right before 20 mins
-                    status = "BREAK TIME"
-                    box_color = (255, 165, 0)
-                    alert_msg = "⏰ <strong>20-20-20 Break Reminder!</strong> Look away from your screen for 20 seconds!"
-                elif is_too_close:
-                    status = "TOO CLOSE"
-                    box_color = (0, 0, 255)
-                    alert_msg = f"🚨 <strong>Warning: Too close to screen!</strong> Face width: {w}px."
-                elif is_slumping:
-                    status = "SLUMPING"
-                    box_color = (0, 140, 255)
-                    alert_msg = "⚠️ <strong>Posture Alert: Slumping detected!</strong> Sit up straight."
-                else:
-                    status = "GOOD"
-                    box_color = (0, 200, 80)
-                    st.session_state.good_frames += 1
-                    alert_msg = "✅ <strong>Optimal Posture & Distance!</strong> Keep it up!"
-
-                if is_too_close or is_slumping or time_since_break > 1180:
-                    alert_placeholder.markdown(f'<div class="alert-banner-danger">{alert_msg}</div>', unsafe_allow_html=True)
-                    if time.time() - last_beep_time > 2.0:
-                        st.session_state.alert_count += 1
-                        if sound_enabled:
-                            play_beep_js()
-                        last_beep_time = time.time()
-                else:
-                    alert_placeholder.markdown(f'<div class="alert-banner-success">{alert_msg}</div>', unsafe_allow_html=True)
-
-                cv2.rectangle(frame, (x, y), (x+w, y+h), box_color, 2)
-                cv2.putText(frame, f"Status: {status}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, box_color, 2)
-                
-                dist_metric.markdown(f'<div class="metric-card"><div class="metric-title">Face Box Size</div><div class="metric-value">{w} px</div><div class="metric-subtitle">Threshold: {distance_threshold}px</div></div>', unsafe_allow_html=True)
-                posture_metric.markdown(f'<div class="metric-card"><div class="metric-title">Posture Status</div><div class="metric-value">{status}</div><div class="metric-subtitle">Active check</div></div>', unsafe_allow_html=True)
-            else:
-                alert_placeholder.markdown('<div class="alert-banner-neutral">🔍 <strong>Searching for face...</strong><br>Center your face in front of the camera.</div>', unsafe_allow_html=True)
-                dist_metric.markdown(f'<div class="metric-card"><div class="metric-title">Face Box Size</div><div class="metric-value">-- px</div><div class="metric-subtitle">No face found</div></div>', unsafe_allow_html=True)
-                posture_metric.markdown(f'<div class="metric-card"><div class="metric-title">Posture Status</div><div class="metric-value">Searching</div><div class="metric-subtitle">No face</div></div>', unsafe_allow_html=True)
-
-            # Calculate Health Score Percentage
-            if st.session_state.total_frames > 0:
-                health_score = int((st.session_state.good_frames / st.session_state.total_frames) * 100)
-            else:
-                health_score = 100
-
-            warnings_metric.markdown(f'<div class="metric-card"><div class="metric-title">Total Alerts</div><div class="metric-value">{st.session_state.alert_count}</div><div class="metric-subtitle">Breaches</div></div>', unsafe_allow_html=True)
-            health_metric.markdown(f'<div class="metric-card"><div class="metric-title">Health Score</div><div class="metric-value">{health_score}%</div><div class="metric-subtitle">Ergonomic rating</div></div>', unsafe_allow_html=True)
-
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            camera_placeholder.image(frame_rgb, channels="RGB", use_container_width=True)
-            time.sleep(0.03)
-
-        cap.release()
-
-# 7. SESSION SUMMARY REPORT (Shown at bottom when session is active or finished)
+    face_cascade = cv2.CascadeClassifier(xml_path)# 7. SESSION SUMMARY REPORT (Shown at bottom when session is active or finished)
 if st.session_state.session_start_time is not None:
     st.markdown("---")
     st.markdown("### 📋 Session Summary Report")
