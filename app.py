@@ -5,15 +5,19 @@ import time
 
 import os
 import urllib.request
+import cv2
 
 # Ensure the Haar cascade file is downloaded safely on startup
 xml_path = "haarcascade_frontalface_default.xml"
-if not os.path.exists(xml_path):
+if not os.path.exists(xml_path) or os.path.getsize(xml_path) == 0:
     url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
     urllib.request.urlretrieve(url, xml_path)
 
-face_cascade = cv2.CascadeClassifier(xml_path)
-
+# Only create the classifier if the file exists properly
+if os.path.exists(xml_path):
+    face_cascade = cv2.CascadeClassifier(xml_path)
+else:
+    face_cascade = None
 # 1. PAGE CONFIGURATION
 st.set_page_config(
     page_title="Postly - Digital Well-Being Assistant",
