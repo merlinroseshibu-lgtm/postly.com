@@ -210,15 +210,14 @@ with col_metrics:
         health_metric.markdown('<div class="metric-card"><div class="metric-title">Health Score</div><div class="metric-value">100%</div><div class="metric-subtitle">Ergonomic rating</div></div>', unsafe_allow_html=True)
 
 # 6. RUN WEBCAM WITH DISTANCE, POSTURE, & BREAK TIMER LOGIC
-# 6. RUN WEBCAM WITH DISTANCE, POSTURE, & BREAK TIMER LOGIC
 if st.session_state.camera_running:
     xml_path = "haarcascade_frontalface_default.xml"
     if not os.path.exists(xml_path):
         url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
         urllib.request.urlretrieve(url, xml_path)
         
-    face_cascade = cv2.CascadeClassifier(xml_path)
-# 7. SESSION SUMMARY REPORT
+    # Indent this line and use underscores:
+    face_cascade = cv2.CascadeClassifier(xml_path)# 7. SESSION SUMMARY REPORT
 if st.session_state.session_start_time is not None:
     st.markdown("---")
     st.markdown("### 📋 Session Summary Report")
