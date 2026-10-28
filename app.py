@@ -2,22 +2,9 @@ import cv2
 import numpy as np
 import streamlit as st
 import time
-
 import os
 import urllib.request
-import cv2
 
-# Ensure the Haar cascade file is downloaded safely on startup
-xml_path = "haarcascade_frontalface_default.xml"
-if not os.path.exists(xml_path) or os.path.getsize(xml_path) == 0:
-    url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
-    urllib.request.urlretrieve(url, xml_path)
-
-# Only create the classifier if the file exists properly
-if os.path.exists(xml_path):
-    face_cascade = cv2.CascadeClassifier(xml_path)
-else:
-    face_cascade = None
 # 1. PAGE CONFIGURATION
 st.set_page_config(
     page_title="Postly - Digital Well-Being Assistant",
@@ -26,7 +13,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 2. DARK BURGUNDY THEME & BERKSHIRE FONT STYLING (CSS)
 # 2. DARK BURGUNDY THEME STYLING (CSS)
 CUSTOM_CSS = """
 <style>
@@ -127,6 +113,7 @@ CUSTOM_CSS = """
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
 # 3. AUDIO ALERT (JavaScript Chime)
 def play_beep_js():
     beep_code = """
@@ -223,18 +210,15 @@ with col_metrics:
         health_metric.markdown('<div class="metric-card"><div class="metric-title">Health Score</div><div class="metric-value">100%</div><div class="metric-subtitle">Ergonomic rating</div></div>', unsafe_allow_html=True)
 
 # 6. RUN WEBCAM WITH DISTANCE, POSTURE, & BREAK TIMER LOGIC
-# 6. RUN WEBCAM WITH DISTANCE, POSTURE, & BREAK TIMER LOGIC
 if st.session_state.camera_running:
-    import os
-    import urllib.request
-    
     xml_path = "haarcascade_frontalface_default.xml"
     if not os.path.exists(xml_path):
         url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
         urllib.request.urlretrieve(url, xml_path)
         
     face_cascade = cv2.CascadeClassifier(xml_path)
-# 7. SESSION SUMMARY REPORT (Shown at bottom when session is active or finished)
+
+# 7. SESSION SUMMARY REPORT
 if st.session_state.session_start_time is not None:
     st.markdown("---")
     st.markdown("### 📋 Session Summary Report")
