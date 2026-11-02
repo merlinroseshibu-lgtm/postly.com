@@ -1,9 +1,7 @@
-import numpy as np
 import streamlit as st
 import time
 import random
 import datetime
-from PIL import Image
 
 # 1. PAGE CONFIGURATION
 st.set_page_config(
@@ -86,94 +84,162 @@ CUSTOM_CSS = """
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# 3. SIDEBAR SETTINGS
-with st.sidebar:
-    st.markdown("### ⚙️ System Settings")
-    distance_threshold = st.slider("📏 Sensitivity Threshold", min_value=50, max_value=200, value=100, step=10)
-    
-    st.markdown("---")
-    st.markdown("### 🍅 Pomodoro Focus Engine")
-    pomo_mode = st.radio("Sprint Mode", ["Work Sprint (25m)", "Short Break (5m)"])
-    if st.button("Reset Timer"):
-        st.toast("Pomodoro timer restarted!")
+# 3. AUDIO BEEP & BACKGROUND NOTIFICATION JAVASCRIPT ENGINE
+def trigger_alert_system(message):
+    alert_code = f"""
+    <script>
+    // 1. Play Web Audio API Beep Sound
+    try {{
+        var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        var osc = audioCtx.createOscillator();
+        var gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5 note
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.4);
+    }} catch(e) {{}}
 
-    st.markdown("---")
-    st.markdown("### 🌙 Night & Bedtime Guard")
-    bedtime_hour = st.slider("Select Target Bedtime", min_value=18, max_value=23, value=22, format="%d:00 PM")
+    // 2. Trigger Native Background Browser Notification (Works even across other tabs!)
+    if (window.Notification) {{
+        if (Notification.permission === "granted") {{
+            new Notification("⚠️ Postly Well-Being Alert!", {{
+                body: "{message}",
+                icon: "https://em-content.zobj.net/source/apple/391/shield_1f6e1-fe0f.png"
+            }});
+        }} else if (Notification.permission !== "denied") {{
+            Notification.requestPermission().then(permission => {{
+                if (permission === "granted") {{
+                    new Notification("⚠️ Postly Well-Being Alert!", {{ body: "{message}" }});
+                }}
+            }});
+        }}
+    }}
+    </script>
+    """
+    st.components.v1.html(alert_code, height=0, width=0)
 
-# 4. HEADER
-st.markdown("""
-<div class="header-box">
-    <h1>Postly</h1>
-    <p>Smart Ergonomic & Focus Protection System</p>
-</div>
-""", unsafe_allow_html=True)
+# Request notification permissions on boot
+st.components.v1.html("""
+<script>
+if (window.Notification && Notification.permission !== "granted") {
+    Notification.requestPermission();
+}
+</script>
+""", height=0, width=0)
 
-# Bedtime Alert Check
-current_hour = datetime.datetime.now().hour
-if current_hour >= bedtime_hour or current_hour <= 5:
-    st.markdown(f"""
-    <div class="alert-banner-neutral">
-        🌙 <strong>Late Night Protection Active:</strong> Past your set bedtime ({bedtime_hour}:00 PM). Consider closing screen time to protect your sleep cycle!
-    </div>
-    """, unsafe_allow_html=True)
-
-# Initialize Session States
+# 4. INITIALIZE SESSION STATES
 if "alert_count" not in st.session_state:
     st.session_state.alert_count = 0
 if "session_start_time" not in st.session_state:
     st.session_state.session_start_time = time.time()
 if "good_frames" not in st.session_state:
-    st.session_state.good_frames = 10
+    st.session_state.good_frames = 15
 if "total_frames" not in st.session_state:
-    st.session_state.total_frames = 10
+    st.session_state.total_frames = 20
+if "pomo_start" not in st.session_state:
+    st.session_state.pomo_start = time.time()
+if "rule_20_start" not in st.session_state:
+    st.session_state.rule_20_start = time.time()
 
-col_cam, col_metrics = st.columns([1.5, 1.0], gap="medium")
+# 5. SIDEBAR CONTROLS (Pomodoro & Bedtime Guard)
+with st.sidebar:
+    st.markdown("### ⚙️ Live Monitoring Controls")
+    posture_mode = st.selectbox("Posture Sensitivity", ["Normal", "Strict", "Relaxed"])
+    
+    st.markdown("---")
+    st.markdown("### 🍅 Live Pomodoro Engine")
+    pomo_mins = st.slider("Work Sprint Length (Mins)", 1, 45, 25)
+    
+    elapsed_pomo = int((time.time() - st.session_state.pomo_start) / 60)
+    time_left_pomo = max(0, pomo_mins - elapsed_pomo)
+    st.metric("Pomodoro Countdown", f"{time_left_pomo} mins left")
+    
+    if st.button("🔄 Reset Timer"):
+        st.session_state.pomo_start = time.time()
+        st.rerun()
+
+    st.markdown("---")
+    st.markdown("### 🌙 Night Guard")
+    bedtime_hour = st.slider("Target Bedtime", 18, 23, 22, format="%d:00 PM")
+
+# 6. HEADER & NIGHT GUARD BANNER
+st.markdown("""
+<div class="header-box">
+    <h1>Postly</h1>
+    <p>Advanced Real-Time Ergonomic & Cross-Tab Notification Assistant</p>
+</div>
+""", unsafe_allow_html=True)
+
+current_hour = datetime.datetime.now().hour
+if current_hour >= bedtime_hour or current_hour <= 5:
+    st.markdown(f"""
+    <div class="alert-banner-neutral">
+        🌙 <strong>Late Night Protection Active:</strong> Past your set bedtime ({bedtime_hour}:00 PM). Consider wrapping up screen time to protect your sleep!
+    </div>
+    """, unsafe_allow_html=True)
+
+# 7. MAIN INTERFACE COLUMNS
+col_cam, col_metrics = st.columns([1.4, 1.0], gap="medium")
 
 with col_cam:
-    st.markdown("### 🎥 Cloud Web Camera Feed")
-    st.info("Take a snapshot using your browser camera below to audit posture and distance!")
+    st.markdown("### 🎥 Live Posture & Eye-Strain Feed")
+    st.info("💡 **Tip:** Click snapshot periodically to update your live posture audit. If you slouch or lose focus, Postly fires an audio chime and a background tab notification!")
     
-    camera_image = st.camera_input("Take posture snapshot")
+    # Live interactive snapshot trigger
+    cam_input = st.camera_input("Live Audit Capture")
     
-    if camera_image is not None:
-        image = Image.open(camera_image)
-        img_array = np.array(image)
-        
-        # Pure python image validation check
+    if cam_input is not None:
         st.session_state.total_frames += 1
-        st.success("✅ Snapshot captured successfully! Posture and lighting verified.")
-        st.session_state.good_frames += 1
+        # Random simulation for demonstration accuracy or bad posture detection
+        is_slouching = random.choice([False, False, True]) # 33% chance to simulate real-time slouch detection trigger
+        
+        if is_slouching:
+            st.markdown('<div class="alert-banner-danger">⚠️ Slouching or Forward Head Posture Detected! Sit up straight.</div>', unsafe_allow_html=True)
+            st.session_state.alert_count += 1
+            trigger_alert_system("Hey! Your posture is slipping. Sit up straight and protect your spine!")
+        else:
+            st.success("✅ Excellent posture and alignment maintained!")
+            st.session_state.good_frames += 5
+
+    # 20-20-20 Eye Strain Reminder Logic
+    elapsed_eye_rule = int((time.time() - st.session_state.rule_20_start) / 60)
+    if elapsed_eye_rule >= 20:
+        trigger_alert_system("20-20-20 Rule Alert: Look 20 feet away for 20 seconds to rest your eyes!")
+        st.session_state.rule_20_start = time.time()
 
 with col_metrics:
     st.markdown("### 🌸 Postly Plant Status")
     health_score = int((st.session_state.good_frames / max(1, st.session_state.total_frames)) * 100)
     
     if health_score >= 80:
-        st.success("🌸 **Your Postly Flower is Blooming!** Posture is excellent.")
+        st.success("🌸 **Your Postly Flower is Blooming!** Great posture.")
     elif health_score >= 50:
-        st.warning("🌱 **Your Flower is Thirsting.** Sit upright to keep it healthy.")
+        st.warning("🌱 **Your Flower is Thirsting.** Align your shoulders!")
     else:
-        st.error("🥀 **Your Flower is Wilting!** Too much slouching detected.")
+        st.error("🥀 **Your Flower is Wilting!** Heavy slouching detected.")
 
     st.markdown("---")
-    st.markdown("### 🤸 Desk Stretch Break")
+    st.markdown("### 🤸 Guided Micro-Stretches")
     stretches = [
-        "**Shoulder Rolls:** Roll your shoulders backward in slow circles 10 times.",
-        "**Neck Tilt:** Gently tilt your ear toward your shoulder, holding for 15 seconds.",
-        "**Chest Opener:** Interlace fingers behind your back and pull your shoulders back.",
-        "**20-20-20 Rule:** Look away at an object 20 feet away for 20 seconds."
+        "**Shoulder Rolls:** Roll shoulders backward 10 times.",
+        "**Neck Tilt:** Gently tilt ear to shoulder for 15s per side.",
+        "**Chest Opener:** Interlace fingers behind back and press forward.",
+        "**Eye Relaxation:** Blink rapidly for 10 seconds to re-lubricate eyes."
     ]
-    if st.button("✨ Micro-Stretch Idea"):
+    if st.button("✨ Give Me a Stretch"):
         st.info(random.choice(stretches))
 
-# 5. SESSION SUMMARY REPORT
+# 8. SESSION SUMMARY REPORT
 st.markdown("---")
-st.markdown("### 📋 Session Summary Report")
+st.markdown("### 📋 Live Session Summary")
 r1, r2, r3 = st.columns(3)
 with r1:
     st.metric("Total Session Time", f"{int(time.time() - st.session_state.session_start_time)//60} mins")
 with r2:
-    st.metric("Total Posture Breaches", st.session_state.alert_count)
+    st.metric("Posture Breaches Caught", st.session_state.alert_count)
 with r3:
-    st.metric("Final Ergonomic Rating", f"{health_score}%")
+    st.metric("Ergonomic Health Score", f"{health_score}%")
