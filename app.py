@@ -137,7 +137,10 @@ if not os.path.exists(xml_path):
     url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
     urllib.request.urlretrieve(url, xml_path)
 
-face_cascade = cv2.CascadeClassifier(xml_path)
+try:
+    face_cascade = cv2.CascadeClassifier(xml_path)
+except Exception:
+    face_cascade = None
 
 # 5. SIDEBAR SETTINGS (INCLUDES POMODORO & CUSTOM BEDTIME)
 with st.sidebar:
