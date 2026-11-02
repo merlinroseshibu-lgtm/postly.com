@@ -4,6 +4,8 @@ import streamlit as st
 import time
 import os
 import urllib.request
+import random
+import datetime
 
 # 1. PAGE CONFIGURATION
 st.set_page_config(
@@ -77,17 +79,6 @@ CUSTOM_CSS = """
         margin: 15px 0;
         border: 1px solid #5C1D1D;
     }
-    .alert-banner-success {
-        background: linear-gradient(135deg, #064E3B 100%, #022C22 0%);
-        border-left: 6px solid #10B981;
-        padding: 16px 20px;
-        border-radius: 12px;
-        color: #A7F3D0;
-        font-weight: 700;
-        font-size: 1.1rem;
-        margin: 15px 0;
-        border: 1px solid #065F46;
-    }
     .alert-banner-neutral {
         background: #1E293B;
         border-left: 6px solid #64748B;
@@ -114,46 +105,73 @@ CUSTOM_CSS = """
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# 3. AUDIO ALERT (JavaScript Chime)
-def play_beep_js():
-    beep_code = """
+# 3. BACKGROUND NOTIFICATIONS & SOUND ALERTS
+def request_notification_permission():
+    permission_code = """
     <script>
-    try {
-        var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        var osc = audioCtx.createOscillator();
-        var gain = audioCtx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(659.25, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.35);
-    } catch(e) {}
+    if (window.Notification && Notification.permission !== "granted") {
+        Notification.requestPermission();
+    }
     </script>
     """
-    st.components.v1.html(beep_code, height=0, width=0)
+    st.components.v1.html(permission_code, height=0, width=0)
 
-# 4. SIDEBAR SETTINGS
+def trigger_background_alert(message):
+    notif_code = f"""
+    <script>
+    if (window.Notification && Notification.permission === "granted") {{
+        new Notification("⚠️ Postly Alert!", {{
+            body: "{message}",
+            icon: "https://em-content.zobj.net/source/apple/391/shield_1f6e1-fe0f.png"
+        }});
+    }}
+    </script>
+    """
+    st.components.v1.html(notif_code, height=0, width=0)
+
+request_notification_permission()
+
+# 4. SAFE HAAR CASCADE DOWNLOAD
+xml_path = "haarcascade_frontalface_default.xml"
+if not os.path.exists(xml_path):
+    url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
+    urllib.request.urlretrieve(url, xml_path)
+
+face_cascade = cv2.CascadeClassifier(xml_path)
+
+# 5. SIDEBAR SETTINGS (INCLUDES POMODORO & CUSTOM BEDTIME)
 with st.sidebar:
     st.markdown("### ⚙️ System Settings")
-    distance_threshold = st.slider("📏 Max Safe Face Width", min_value=100, max_value=350, value=200, step=10, help="Triggers distance alert if face width exceeds this.")
-    sound_enabled = st.toggle("🔔 Enable Audio Alert Beeps", value=True)
-    camera_id = st.number_input("📹 Camera Device Index", min_value=0, max_value=5, value=0, step=1)
+    distance_threshold = st.slider("📏 Max Safe Face Width", min_value=100, max_value=350, value=200, step=10)
+    sound_enabled = st.toggle("🔔 Enable Notifications & Alerts", value=True)
+    
     st.markdown("---")
-    st.markdown("### 💡 Ergonomic Guidelines")
-    st.info("**20-20-20 Rule:** Every 20 minutes, look 20 feet away for 20 seconds to protect your vision.")
+    st.markdown("### 🍅 Pomodoro Focus Engine")
+    pomo_mode = st.radio("Sprint Mode", ["Work Sprint (25m)", "Short Break (5m)"])
+    if st.button("Reset Pomodoro"):
+        st.session_state.pomo_start = time.time()
+        st.toast("Pomodoro timer restarted!")
 
-# 5. HEADER
+    st.markdown("---")
+    st.markdown("### 🌙 Night & Bedtime Guard")
+    bedtime_hour = st.slider("Select Target Bedtime", min_value=18, max_value=23, value=22, format="%d:00 PM")
+
+# 6. HEADER
 st.markdown("""
 <div class="header-box">
     <h1>Postly</h1>
-    <p>Real-Time Posture and Screen-Distance Alert System for Digital Well-Being</p>
+    <p>Smart Ergonomic & Focus Protection System</p>
 </div>
 """, unsafe_allow_html=True)
 
-col_cam, col_metrics = st.columns([1.5, 1.0], gap="medium")
+# Bedtime Alert Banner Check
+current_hour = datetime.datetime.now().hour
+if current_hour >= bedtime_hour or current_hour <= 5:
+    st.markdown(f"""
+    <div class="alert-banner-neutral">
+        🌙 <strong>Late Night Protection Active:</strong> Past your set bedtime ({bedtime_hour}:00 PM). Consider closing screen time to protect your sleep cycle!
+    </div>
+    """, unsafe_allow_html=True)
 
 # Initialize Session States
 if "camera_running" not in st.session_state:
@@ -166,10 +184,8 @@ if "good_frames" not in st.session_state:
     st.session_state.good_frames = 0
 if "total_frames" not in st.session_state:
     st.session_state.total_frames = 0
-if "last_break_time" not in st.session_state:
-    st.session_state.last_break_time = time.time()
-if "break_reminders_count" not in st.session_state:
-    st.session_state.break_reminders_count = 0
+
+col_cam, col_metrics = st.columns([1.5, 1.0], gap="medium")
 
 with col_cam:
     st.markdown("### 🎥 Live Ergonomic Feed")
@@ -179,7 +195,6 @@ with col_cam:
             st.session_state.camera_running = True
             if st.session_state.session_start_time is None:
                 st.session_state.session_start_time = time.time()
-                st.session_state.last_break_time = time.time()
     with b2:
         if st.button("⏹️ Stop Webcam", use_container_width=True):
             st.session_state.camera_running = False
@@ -189,45 +204,35 @@ with col_cam:
         camera_placeholder.info("Click **'▶️ Start Webcam'** above to begin monitoring.")
 
 with col_metrics:
-    st.markdown("### 📊 Real-Time Status & Metrics")
-    alert_placeholder = st.empty()
-    alert_placeholder.markdown('<div class="alert-banner-neutral">ℹ️ Camera is inactive. Start camera to view alerts.</div>', unsafe_allow_html=True)
+    st.markdown("### 🌸 Postly Plant Status")
+    health_score = int((st.session_state.good_frames / max(1, st.session_state.total_frames)) * 100)
     
-    m1, m2 = st.columns(2)
-    with m1:
-        dist_metric = st.empty()
-        dist_metric.markdown('<div class="metric-card"><div class="metric-title">Face Box Size</div><div class="metric-value">-- px</div><div class="metric-subtitle">Distance metric</div></div>', unsafe_allow_html=True)
-    with m2:
-        posture_metric = st.empty()
-        posture_metric.markdown('<div class="metric-card"><div class="metric-title">Posture Status</div><div class="metric-value">Idle</div><div class="metric-subtitle">Awaiting feed</div></div>', unsafe_allow_html=True)
+    if health_score >= 80:
+        st.success("🌸 **Your Postly Flower is Blooming!** Posture is excellent.")
+    elif health_score >= 50:
+        st.warning("🌱 **Your Flower is Thirsting.** Sit upright to keep it healthy.")
+    else:
+        st.error("🥀 **Your Flower is Wilting!** Too much slouching detected.")
 
-    m3, m4 = st.columns(2)
-    with m3:
-        warnings_metric = st.empty()
-        warnings_metric.markdown('<div class="metric-card"><div class="metric-title">Total Alerts</div><div class="metric-value">0</div><div class="metric-subtitle">Breaches</div></div>', unsafe_allow_html=True)
-    with m4:
-        health_metric = st.empty()
-        health_metric.markdown('<div class="metric-card"><div class="metric-title">Health Score</div><div class="metric-value">100%</div><div class="metric-subtitle">Ergonomic rating</div></div>', unsafe_allow_html=True)
+    st.markdown("---")
+    st.markdown("### 🤸 Desk Stretch Break")
+    stretches = [
+        "**Shoulder Rolls:** Roll your shoulders backward in slow circles 10 times.",
+        "**Neck Tilt:** Gently tilt your ear toward your shoulder, holding for 15 seconds.",
+        "**Chest Opener:** Interlace fingers behind your back and pull your shoulders back.",
+        "**20-20-20 Rule:** Look away at an object 20 feet away for 20 seconds."
+    ]
+    if st.button("✨ Micro-Stretch Idea"):
+        st.info(random.choice(stretches))
 
-# 6. RUN WEBCAM WITH DISTANCE, POSTURE, & BREAK TIMER LOGIC
-if st.session_state.camera_running:
-    xml_path = "haarcascade_frontalface_default.xml"
-    if not os.path.exists(xml_path):
-        url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
-        urllib.request.urlretrieve(url, xml_path)
-        
-    # Indent this line and use underscores:
-    face_cascade = cv2.CascadeClassifier(xml_path)# 7. SESSION SUMMARY REPORT
+# 7. SESSION SUMMARY REPORT
 if st.session_state.session_start_time is not None:
     st.markdown("---")
     st.markdown("### 📋 Session Summary Report")
-    r1, r2, r3, r4 = st.columns(4)
+    r1, r2, r3 = st.columns(3)
     with r1:
         st.metric("Total Session Time", f"{int(time.time() - st.session_state.session_start_time)//60} mins")
     with r2:
         st.metric("Total Posture Breaches", st.session_state.alert_count)
     with r3:
-        st.metric("Break Reminders Triggered", st.session_state.break_reminders_count)
-    with r4:
-        final_score = int((st.session_state.good_frames / max(1, st.session_state.total_frames)) * 100)
-        st.metric("Final Ergonomic Score", f"{final_score}%")
+        st.metric("Final Ergonomic Rating", f"{health_score}%")
