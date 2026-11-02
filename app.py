@@ -280,4 +280,4 @@ if st.session_state.camera_running:
             camera_placeholder.image(frame_rgb, channels="RGB", use_container_width=True)
             time.sleep(0.03)
 
-        cap.release() "95%"
+        cap.release()
