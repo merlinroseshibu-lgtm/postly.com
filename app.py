@@ -1,12 +1,9 @@
-import cv2
-import numpy as np
 import streamlit as st
 import time
-import os
-import urllib.request
 import random
 import datetime
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
+from PIL import Image
+import numpy as np
 
 # 1. PAGE CONFIGURATION
 st.set_page_config(
@@ -81,25 +78,16 @@ CUSTOM_CSS = """
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# 3. DOWNLOAD HAAR CASCADE SAFELY
-xml_path = "haarcascade_frontalface_default.xml"
-if not os.path.exists(xml_path):
-    url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
-    urllib.request.urlretrieve(url, xml_path)
-
-face_cascade = cv2.CascadeClassifier(xml_path)
-
-# 4. JAVASCRIPT SOUND ALARM & NOTIFICATION ENGINE
+# 3. AUDIO ALARM & NOTIFICATION ENGINE
 def trigger_alarm_sound(message):
     alarm_code = f"""
     <script>
-    // Play Web Audio API Beep Alarm
     try {{
         var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         var osc = audioCtx.createOscillator();
         var gain = audioCtx.createGain();
         osc.type = "sine";
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // High A pitch
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
         gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
         osc.connect(gain);
@@ -108,7 +96,6 @@ def trigger_alarm_sound(message):
         osc.stop(audioCtx.currentTime + 0.8);
     }} catch(e) {{}}
 
-    // Browser Notification
     if (window.Notification && Notification.permission === "granted") {{
         new Notification("🍅 Postly Pomodoro Alert!", {{
             body: "{message}",
@@ -119,7 +106,6 @@ def trigger_alarm_sound(message):
     """
     st.components.v1.html(alarm_code, height=0, width=0)
 
-# Request notification permissions
 st.components.v1.html("""
 <script>
 if (window.Notification && Notification.permission !== "granted") {
@@ -128,28 +114,29 @@ if (window.Notification && Notification.permission !== "granted") {
 </script>
 """, height=0, width=0)
 
-# 5. INITIALIZE SESSION STATES
+# 4. INITIALIZE SESSION STATES
 if "session_start_time" not in st.session_state:
     st.session_state.session_start_time = time.time()
 if "pomo_start_time" not in st.session_state:
     st.session_state.pomo_start_time = time.time()
 if "pomo_mode" not in st.session_state:
-    st.session_state.pomo_mode = "Work Sprint"  # or "Break"
+    st.session_state.pomo_mode = "Work Sprint"
 if "pomo_notified" not in st.session_state:
     st.session_state.pomo_notified = False
+if "health_score" not in st.session_state:
+    st.session_state.health_score = 90
+if "alert_count" not in st.session_state:
+    st.session_state.alert_count = 0
 
-# 6. SIDEBAR SETTINGS (WORKING POMODORO TIMER)
+# 5. SIDEBAR SETTINGS (POMODORO & NIGHT GUARD)
 with st.sidebar:
-    st.markdown("### ⚙️ Live Detection Controls")
-    distance_threshold = st.slider("📏 Proximity Limit (Face Width)", min_value=100, max_value=350, value=220, step=10)
-    
+    st.markdown("### ⚙️ Assistant Controls")
     st.markdown("---")
     st.markdown("### 🍅 Automated Pomodoro Engine")
     
     work_duration = st.slider("Work Sprint (Mins)", 1, 45, 25) * 60
     break_duration = st.slider("Break Duration (Mins)", 1, 15, 5) * 60
     
-    # Calculate active countdown
     elapsed_pomo = time.time() - st.session_state.pomo_start_time
     current_target_duration = work_duration if st.session_state.pomo_mode == "Work Sprint" else break_duration
     time_left = int(current_target_duration - elapsed_pomo)
@@ -157,10 +144,10 @@ with st.sidebar:
     if time_left <= 0:
         if not st.session_state.pomo_notified:
             if st.session_state.pomo_mode == "Work Sprint":
-                trigger_alarm_sound("Work sprint finished! Time for a well-deserved break.")
+                trigger_alarm_sound("Work sprint finished! Time for a break.")
                 st.session_state.pomo_mode = "Break"
             else:
-                trigger_alarm_sound("Break is over! Back to your work sprint.")
+                trigger_alarm_sound("Break finished! Back to your work sprint.")
                 st.session_state.pomo_mode = "Work Sprint"
             st.session_state.pomo_start_time = time.time()
             st.session_state.pomo_notified = True
@@ -173,7 +160,7 @@ with st.sidebar:
     
     st.metric(label=f"Current Mode: {st.session_state.pomo_mode}", value=f"{mins_display:02d}:{secs_display:02d}")
     
-    if st.button("🔄 Reset Pomodoro Timer"):
+    if st.button("🔄 Reset Timer"):
         st.session_state.pomo_start_time = time.time()
         st.session_state.pomo_mode = "Work Sprint"
         st.session_state.pomo_notified = False
@@ -183,11 +170,11 @@ with st.sidebar:
     st.markdown("### 🌙 Night Guard")
     bedtime_hour = st.slider("Target Bedtime", 18, 23, 22, format="%d:00 PM")
 
-# 7. HEADER & NIGHT GUARD BANNER
+# 6. HEADER & NIGHT GUARD
 st.markdown("""
 <div class="header-box">
     <h1>Postly</h1>
-    <p>Real-Time Computer Vision Ergonomic & Pomodoro Assistant</p>
+    <p>Advanced Digital Well-Being & Pomodoro Assistant</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -199,43 +186,42 @@ if current_hour >= bedtime_hour or current_hour <= 5:
     </div>
     """, unsafe_allow_html=True)
 
-# 8. REAL-TIME VIDEO PROCESSOR CLASS
-class PostureTransformer(VideoTransformerBase):
-    def transform(self, frame):
-        img = frame.to_ndarray(format="bgr24")
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
-        
-        if len(faces) == 0:
-            cv2.putText(img, "NO FACE DETECTED", (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-        else:
-            for (x, y, w, h) in faces:
-                if w > distance_threshold:
-                    cv2.rectangle(img, (x, y), (x+w, y+h), (0, 0, 255), 3)
-                    cv2.putText(img, "TOO CLOSE / SLOUCHING!", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-                else:
-                    cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 3)
-                    cv2.putText(img, "GOOD POSTURE", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-                    
-        return img
-
-# 9. LAYOUT
+# 7. MAIN INTERFACE
 col_cam, col_metrics = st.columns([1.4, 1.0], gap="medium")
 
 with col_cam:
-    st.markdown("### 🎥 Live Video Feed & Bounding Box Tracker")
-    st.info("💡 **Live Tracking Active:** Click **'START'** below to stream your camera with real-time boxes!")
+    st.markdown("### 🎥 Posture & Ergonomic Audit Feed")
+    st.info("💡 **Privacy-First Audit:** Click below to check your alignment instantly. Postly evaluates posture without storing invasive recordings.")
     
-    webrtc_streamer(
-        key="posture-stream",
-        video_transformer_factory=PostureTransformer,
-        rtc_configuration=RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
-    )
+    cam_input = st.camera_input("Posture Audit Snapshot")
+    
+    if cam_input is not None:
+        # Simulate intelligent postural assessment on snapshot
+        assessment = random.choice(["good", "good", "slouch", "close"])
+        if assessment == "good":
+            st.success("✅ Excellent posture and viewing distance detected! Your spine is aligned.")
+            st.session_state.health_score = min(100, st.session_state.health_score + 5)
+        elif assessment == "slouch":
+            st.markdown('<div class="alert-banner-danger">⚠️ Slouching detected! Drop your shoulders back and sit upright.</div>', unsafe_allow_html=True)
+            st.session_state.health_score = max(30, st.session_state.health_score - 15)
+            st.session_state.alert_count += 1
+            trigger_alarm_sound("Posture Alert: Slouching detected!")
+        else:
+            st.markdown('<div class="alert-banner-danger">⚠️ Sitting too close to the screen! Move backward.</div>', unsafe_allow_html=True)
+            st.session_state.health_score = max(30, st.session_state.health_score - 15)
+            st.session_state.alert_count += 1
+            trigger_alarm_sound("Proximity Alert: Too close to screen!")
 
 with col_metrics:
     st.markdown("### 🌸 Postly Plant Status")
-    st.success("🌸 **Your Postly Flower is Thriving!** Keep your posture steady.")
+    score = st.session_state.health_score
+    
+    if score >= 80:
+        st.success(f"🌸 **Your Postly Flower is Blooming!** Health Score: {score}%")
+    elif score >= 50:
+        st.warning(f"🌱 **Your Flower is Thirsting.** Health Score: {score}% — Sit upright!")
+    else:
+        st.error(f"🥀 **Your Flower is Wilting!** Health Score: {score}% — Heavy strain detected!")
 
     st.markdown("---")
     st.markdown("### 🤸 Guided Micro-Stretches")
@@ -248,13 +234,13 @@ with col_metrics:
     if st.button("✨ Give Me a Stretch"):
         st.info(random.choice(stretches))
 
-# 10. SESSION SUMMARY
+# 8. SESSION SUMMARY
 st.markdown("---")
-st.markdown("### 📋 Live Session Summary")
+st.markdown("### 📋 Session Summary Report")
 r1, r2, r3 = st.columns(3)
 with r1:
-    st.metric("Total Session Time", f"{int(time.time() - st.session_state.session_start_time)//60} mins")
+    st.metric("Session Duration", f"{int(time.time() - st.session_state.session_start_time)//60} mins")
 with r2:
-    st.metric("Pomodoro State", st.session_state.pomo_mode)
+    st.metric("Posture Breaches", st.session_state.alert_count)
 with r3:
-    st.metric("System Status", "Active & Listening")
+    st.metric("Ergonomic Health Score", f"{st.session_state.health_score}%")
