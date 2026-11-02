@@ -1,7 +1,12 @@
+import cv2
+import numpy as np
 import streamlit as st
 import time
+import os
+import urllib.request
 import random
 import datetime
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
 
 # 1. PAGE CONFIGURATION
 st.set_page_config(
@@ -38,14 +43,6 @@ CUSTOM_CSS = """
         margin: 8px 0 0 0;
         font-size: 1.05rem;
         color: #F8D7DA;
-    }
-    .metric-card {
-        background-color: #22090F;
-        border-radius: 14px;
-        padding: 18px 20px;
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-        border: 1px solid #4A1522;
-        text-align: center;
     }
     .alert-banner-danger {
         background: linear-gradient(135deg, #450A0A 100%, #2B0606 0%);
@@ -84,45 +81,45 @@ CUSTOM_CSS = """
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# 3. AUDIO BEEP & BACKGROUND NOTIFICATION JAVASCRIPT ENGINE
-def trigger_alert_system(message):
-    alert_code = f"""
+# 3. DOWNLOAD HAAR CASCADE SAFELY
+xml_path = "haarcascade_frontalface_default.xml"
+if not os.path.exists(xml_path):
+    url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
+    urllib.request.urlretrieve(url, xml_path)
+
+face_cascade = cv2.CascadeClassifier(xml_path)
+
+# 4. JAVASCRIPT SOUND ALARM & NOTIFICATION ENGINE
+def trigger_alarm_sound(message):
+    alarm_code = f"""
     <script>
-    // 1. Play Web Audio API Beep Sound
+    // Play Web Audio API Beep Alarm
     try {{
         var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         var osc = audioCtx.createOscillator();
         var gain = audioCtx.createGain();
         osc.type = "sine";
-        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5 note
-        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // High A pitch
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.start();
-        osc.stop(audioCtx.currentTime + 0.4);
+        osc.stop(audioCtx.currentTime + 0.8);
     }} catch(e) {{}}
 
-    // 2. Trigger Native Background Browser Notification (Works even across other tabs!)
-    if (window.Notification) {{
-        if (Notification.permission === "granted") {{
-            new Notification("⚠️ Postly Well-Being Alert!", {{
-                body: "{message}",
-                icon: "https://em-content.zobj.net/source/apple/391/shield_1f6e1-fe0f.png"
-            }});
-        }} else if (Notification.permission !== "denied") {{
-            Notification.requestPermission().then(permission => {{
-                if (permission === "granted") {{
-                    new Notification("⚠️ Postly Well-Being Alert!", {{ body: "{message}" }});
-                }}
-            }});
-        }}
+    // Browser Notification
+    if (window.Notification && Notification.permission === "granted") {{
+        new Notification("🍅 Postly Pomodoro Alert!", {{
+            body: "{message}",
+            icon: "https://em-content.zobj.net/source/apple/391/tomato_1f345.png"
+        }});
     }}
     </script>
     """
-    st.components.v1.html(alert_code, height=0, width=0)
+    st.components.v1.html(alarm_code, height=0, width=0)
 
-# Request notification permissions on boot
+# Request notification permissions
 st.components.v1.html("""
 <script>
 if (window.Notification && Notification.permission !== "granted") {
@@ -131,46 +128,66 @@ if (window.Notification && Notification.permission !== "granted") {
 </script>
 """, height=0, width=0)
 
-# 4. INITIALIZE SESSION STATES
-if "alert_count" not in st.session_state:
-    st.session_state.alert_count = 0
+# 5. INITIALIZE SESSION STATES
 if "session_start_time" not in st.session_state:
     st.session_state.session_start_time = time.time()
-if "good_frames" not in st.session_state:
-    st.session_state.good_frames = 15
-if "total_frames" not in st.session_state:
-    st.session_state.total_frames = 20
-if "pomo_start" not in st.session_state:
-    st.session_state.pomo_start = time.time()
-if "rule_20_start" not in st.session_state:
-    st.session_state.rule_20_start = time.time()
+if "pomo_start_time" not in st.session_state:
+    st.session_state.pomo_start_time = time.time()
+if "pomo_mode" not in st.session_state:
+    st.session_state.pomo_mode = "Work Sprint"  # or "Break"
+if "pomo_notified" not in st.session_state:
+    st.session_state.pomo_notified = False
 
-# 5. SIDEBAR CONTROLS (Pomodoro & Bedtime Guard)
+# 6. SIDEBAR SETTINGS (WORKING POMODORO TIMER)
 with st.sidebar:
-    st.markdown("### ⚙️ Live Monitoring Controls")
-    posture_mode = st.selectbox("Posture Sensitivity", ["Normal", "Strict", "Relaxed"])
+    st.markdown("### ⚙️ Live Detection Controls")
+    distance_threshold = st.slider("📏 Proximity Limit (Face Width)", min_value=100, max_value=350, value=220, step=10)
     
     st.markdown("---")
-    st.markdown("### 🍅 Live Pomodoro Engine")
-    pomo_mins = st.slider("Work Sprint Length (Mins)", 1, 45, 25)
+    st.markdown("### 🍅 Automated Pomodoro Engine")
     
-    elapsed_pomo = int((time.time() - st.session_state.pomo_start) / 60)
-    time_left_pomo = max(0, pomo_mins - elapsed_pomo)
-    st.metric("Pomodoro Countdown", f"{time_left_pomo} mins left")
+    work_duration = st.slider("Work Sprint (Mins)", 1, 45, 25) * 60
+    break_duration = st.slider("Break Duration (Mins)", 1, 15, 5) * 60
     
-    if st.button("🔄 Reset Timer"):
-        st.session_state.pomo_start = time.time()
+    # Calculate active countdown
+    elapsed_pomo = time.time() - st.session_state.pomo_start_time
+    current_target_duration = work_duration if st.session_state.pomo_mode == "Work Sprint" else break_duration
+    time_left = int(current_target_duration - elapsed_pomo)
+    
+    if time_left <= 0:
+        if not st.session_state.pomo_notified:
+            if st.session_state.pomo_mode == "Work Sprint":
+                trigger_alarm_sound("Work sprint finished! Time for a well-deserved break.")
+                st.session_state.pomo_mode = "Break"
+            else:
+                trigger_alarm_sound("Break is over! Back to your work sprint.")
+                st.session_state.pomo_mode = "Work Sprint"
+            st.session_state.pomo_start_time = time.time()
+            st.session_state.pomo_notified = True
+            st.rerun()
+    else:
+        st.session_state.pomo_notified = False
+
+    mins_display = max(0, time_left // 60)
+    secs_display = max(0, time_left % 60)
+    
+    st.metric(label=f"Current Mode: {st.session_state.pomo_mode}", value=f"{mins_display:02d}:{secs_display:02d}")
+    
+    if st.button("🔄 Reset Pomodoro Timer"):
+        st.session_state.pomo_start_time = time.time()
+        st.session_state.pomo_mode = "Work Sprint"
+        st.session_state.pomo_notified = False
         st.rerun()
 
     st.markdown("---")
     st.markdown("### 🌙 Night Guard")
     bedtime_hour = st.slider("Target Bedtime", 18, 23, 22, format="%d:00 PM")
 
-# 6. HEADER & NIGHT GUARD BANNER
+# 7. HEADER & NIGHT GUARD BANNER
 st.markdown("""
 <div class="header-box">
     <h1>Postly</h1>
-    <p>Advanced Real-Time Ergonomic & Cross-Tab Notification Assistant</p>
+    <p>Real-Time Computer Vision Ergonomic & Pomodoro Assistant</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -178,49 +195,47 @@ current_hour = datetime.datetime.now().hour
 if current_hour >= bedtime_hour or current_hour <= 5:
     st.markdown(f"""
     <div class="alert-banner-neutral">
-        🌙 <strong>Late Night Protection Active:</strong> Past your set bedtime ({bedtime_hour}:00 PM). Consider wrapping up screen time to protect your sleep!
+        🌙 <strong>Late Night Protection Active:</strong> Past your set bedtime ({bedtime_hour}:00 PM). Consider wrapping up screen time!
     </div>
     """, unsafe_allow_html=True)
 
-# 7. MAIN INTERFACE COLUMNS
+# 8. REAL-TIME VIDEO PROCESSOR CLASS
+class PostureTransformer(VideoTransformerBase):
+    def transform(self, frame):
+        img = frame.to_ndarray(format="bgr24")
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
+        
+        if len(faces) == 0:
+            cv2.putText(img, "NO FACE DETECTED", (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        else:
+            for (x, y, w, h) in faces:
+                if w > distance_threshold:
+                    cv2.rectangle(img, (x, y), (x+w, y+h), (0, 0, 255), 3)
+                    cv2.putText(img, "TOO CLOSE / SLOUCHING!", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                else:
+                    cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 3)
+                    cv2.putText(img, "GOOD POSTURE", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                    
+        return img
+
+# 9. LAYOUT
 col_cam, col_metrics = st.columns([1.4, 1.0], gap="medium")
 
 with col_cam:
-    st.markdown("### 🎥 Live Posture & Eye-Strain Feed")
-    st.info("💡 **Tip:** Click snapshot periodically to update your live posture audit. If you slouch or lose focus, Postly fires an audio chime and a background tab notification!")
+    st.markdown("### 🎥 Live Video Feed & Bounding Box Tracker")
+    st.info("💡 **Live Tracking Active:** Click **'START'** below to stream your camera with real-time boxes!")
     
-    # Live interactive snapshot trigger
-    cam_input = st.camera_input("Live Audit Capture")
-    
-    if cam_input is not None:
-        st.session_state.total_frames += 1
-        # Random simulation for demonstration accuracy or bad posture detection
-        is_slouching = random.choice([False, False, True]) # 33% chance to simulate real-time slouch detection trigger
-        
-        if is_slouching:
-            st.markdown('<div class="alert-banner-danger">⚠️ Slouching or Forward Head Posture Detected! Sit up straight.</div>', unsafe_allow_html=True)
-            st.session_state.alert_count += 1
-            trigger_alert_system("Hey! Your posture is slipping. Sit up straight and protect your spine!")
-        else:
-            st.success("✅ Excellent posture and alignment maintained!")
-            st.session_state.good_frames += 5
-
-    # 20-20-20 Eye Strain Reminder Logic
-    elapsed_eye_rule = int((time.time() - st.session_state.rule_20_start) / 60)
-    if elapsed_eye_rule >= 20:
-        trigger_alert_system("20-20-20 Rule Alert: Look 20 feet away for 20 seconds to rest your eyes!")
-        st.session_state.rule_20_start = time.time()
+    webrtc_streamer(
+        key="posture-stream",
+        video_transformer_factory=PostureTransformer,
+        rtc_configuration=RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
+    )
 
 with col_metrics:
     st.markdown("### 🌸 Postly Plant Status")
-    health_score = int((st.session_state.good_frames / max(1, st.session_state.total_frames)) * 100)
-    
-    if health_score >= 80:
-        st.success("🌸 **Your Postly Flower is Blooming!** Great posture.")
-    elif health_score >= 50:
-        st.warning("🌱 **Your Flower is Thirsting.** Align your shoulders!")
-    else:
-        st.error("🥀 **Your Flower is Wilting!** Heavy slouching detected.")
+    st.success("🌸 **Your Postly Flower is Thriving!** Keep your posture steady.")
 
     st.markdown("---")
     st.markdown("### 🤸 Guided Micro-Stretches")
@@ -228,18 +243,18 @@ with col_metrics:
         "**Shoulder Rolls:** Roll shoulders backward 10 times.",
         "**Neck Tilt:** Gently tilt ear to shoulder for 15s per side.",
         "**Chest Opener:** Interlace fingers behind back and press forward.",
-        "**Eye Relaxation:** Blink rapidly for 10 seconds to re-lubricate eyes."
+        "**Eye Relaxation:** Blink rapidly for 10 seconds."
     ]
     if st.button("✨ Give Me a Stretch"):
         st.info(random.choice(stretches))
 
-# 8. SESSION SUMMARY REPORT
+# 10. SESSION SUMMARY
 st.markdown("---")
 st.markdown("### 📋 Live Session Summary")
 r1, r2, r3 = st.columns(3)
 with r1:
     st.metric("Total Session Time", f"{int(time.time() - st.session_state.session_start_time)//60} mins")
 with r2:
-    st.metric("Posture Breaches Caught", st.session_state.alert_count)
+    st.metric("Pomodoro State", st.session_state.pomo_mode)
 with r3:
-    st.metric("Ergonomic Health Score", f"{health_score}%")
+    st.metric("System Status", "Active & Listening")
