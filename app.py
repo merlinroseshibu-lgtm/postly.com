@@ -105,33 +105,7 @@ CUSTOM_CSS = """
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# 3. BACKGROUND NOTIFICATIONS & SOUND ALERTS
-def request_notification_permission():
-    permission_code = """
-    <script>
-    if (window.Notification && Notification.permission !== "granted") {
-        Notification.requestPermission();
-    }
-    </script>
-    """
-    st.components.v1.html(permission_code, height=0, width=0)
-
-def trigger_background_alert(message):
-    notif_code = f"""
-    <script>
-    if (window.Notification && Notification.permission === "granted") {{
-        new Notification("⚠️ Postly Alert!", {{
-            body: "{message}",
-            icon: "https://em-content.zobj.net/source/apple/391/shield_1f6e1-fe0f.png"
-        }});
-    }}
-    </script>
-    """
-    st.components.v1.html(notif_code, height=0, width=0)
-
-request_notification_permission()
-
-# 4. SAFE HAAR CASCADE DOWNLOAD
+# 3. SAFE HAAR CASCADE DOWNLOAD
 xml_path = "haarcascade_frontalface_default.xml"
 if not os.path.exists(xml_path):
     url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
@@ -142,24 +116,22 @@ try:
 except Exception:
     face_cascade = None
 
-# 5. SIDEBAR SETTINGS (INCLUDES POMODORO & CUSTOM BEDTIME)
+# 4. SIDEBAR SETTINGS
 with st.sidebar:
     st.markdown("### ⚙️ System Settings")
     distance_threshold = st.slider("📏 Max Safe Face Width", min_value=100, max_value=350, value=200, step=10)
-    sound_enabled = st.toggle("🔔 Enable Notifications & Alerts", value=True)
     
     st.markdown("---")
     st.markdown("### 🍅 Pomodoro Focus Engine")
     pomo_mode = st.radio("Sprint Mode", ["Work Sprint (25m)", "Short Break (5m)"])
-    if st.button("Reset Pomodoro"):
-        st.session_state.pomo_start = time.time()
+    if st.button("Reset Timer"):
         st.toast("Pomodoro timer restarted!")
 
     st.markdown("---")
     st.markdown("### 🌙 Night & Bedtime Guard")
     bedtime_hour = st.slider("Select Target Bedtime", min_value=18, max_value=23, value=22, format="%d:00 PM")
 
-# 6. HEADER
+# 5. HEADER
 st.markdown("""
 <div class="header-box">
     <h1>Postly</h1>
@@ -177,34 +149,42 @@ if current_hour >= bedtime_hour or current_hour <= 5:
     """, unsafe_allow_html=True)
 
 # Initialize Session States
-if "camera_running" not in st.session_state:
-    st.session_state.camera_running = False
 if "alert_count" not in st.session_state:
     st.session_state.alert_count = 0
 if "session_start_time" not in st.session_state:
-    st.session_state.session_start_time = None
+    st.session_state.session_start_time = time.time()
 if "good_frames" not in st.session_state:
-    st.session_state.good_frames = 0
+    st.session_state.good_frames = 10
 if "total_frames" not in st.session_state:
-    st.session_state.total_frames = 0
+    st.session_state.total_frames = 10
 
 col_cam, col_metrics = st.columns([1.5, 1.0], gap="medium")
 
 with col_cam:
-    st.markdown("### 🎥 Live Ergonomic Feed")
-    b1, b2 = st.columns(2)
-    with b1:
-        if st.button("▶️ Start Webcam", use_container_width=True):
-            st.session_state.camera_running = True
-            if st.session_state.session_start_time is None:
-                st.session_state.session_start_time = time.time()
-    with b2:
-        if st.button("⏹️ Stop Webcam", use_container_width=True):
-            st.session_state.camera_running = False
-
-    camera_placeholder = st.empty()
-    if not st.session_state.camera_running:
-        camera_placeholder.info("Click **'▶️ Start Webcam'** above to begin monitoring.")
+    st.markdown("### 🎥 Cloud Web Camera Feed")
+    st.info("Take a snapshot using your browser camera below to audit posture and face distance!")
+    
+    # Browser-safe camera input (works instantly on Streamlit Cloud!)
+    camera_image = st.camera_input("Take posture snapshot")
+    
+    if camera_image is not None:
+        bytes_data = camera_image.getvalue()
+        cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
+        gray = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2GRAY)
+        
+        if face_cascade is not None:
+            faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+            st.session_state.total_frames += 1
+            if len(faces) > 0:
+                for (x, y, w, h) in faces:
+                    if w > distance_threshold:
+                        st.markdown('<div class="alert-banner-danger">⚠️ Too close to the screen! Move backward.</div>', unsafe_allow_html=True)
+                        st.session_state.alert_count += 1
+                    else:
+                        st.success("✅ Perfect distance and posture detected!")
+                        st.session_state.good_frames += 1
+            else:
+                st.warning("⚠️ No face detected clearly. Adjust your lighting or angle.")
 
 with col_metrics:
     st.markdown("### 🌸 Postly Plant Status")
@@ -228,14 +208,13 @@ with col_metrics:
     if st.button("✨ Micro-Stretch Idea"):
         st.info(random.choice(stretches))
 
-# 7. SESSION SUMMARY REPORT
-if st.session_state.session_start_time is not None:
-    st.markdown("---")
-    st.markdown("### 📋 Session Summary Report")
-    r1, r2, r3 = st.columns(3)
-    with r1:
-        st.metric("Total Session Time", f"{int(time.time() - st.session_state.session_start_time)//60} mins")
-    with r2:
-        st.metric("Total Posture Breaches", st.session_state.alert_count)
-    with r3:
-        st.metric("Final Ergonomic Rating", f"{health_score}%")
+# 6. SESSION SUMMARY REPORT
+st.markdown("---")
+st.markdown("### 📋 Session Summary Report")
+r1, r2, r3 = st.columns(3)
+with r1:
+    st.metric("Total Session Time", f"{int(time.time() - st.session_state.session_start_time)//60} mins")
+with r2:
+    st.metric("Total Posture Breaches", st.session_state.alert_count)
+with r3:
+    st.metric("Final Ergonomic Rating", f"{health_score}%")
