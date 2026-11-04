@@ -1,6 +1,7 @@
+import cv2
+import numpy as np
 import streamlit as st
 import time
-import datetime
 
 # 1. PAGE CONFIGURATION
 st.set_page_config(
@@ -10,184 +11,270 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 2. DARK BURGUNDY THEME STYLING (CSS)
+# 2. BURGUNDY THEME STYLING (CSS)
 CUSTOM_CSS = """
 <style>
     .stApp {
-        background: linear-gradient(180deg, #120306 0%, #1A050A 100%);
-        color: #E2E8F0;
+        background: linear-gradient(180deg, #FDFBFB 0%, #FAF2F4 100%);
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        color: #2D3748;
     }
     .header-box {
-        background: linear-gradient(135deg, #4A0E17 100%, #2D070D 0%);
-        padding: 28px 34px;
-        border-radius: 18px;
+        background: linear-gradient(135deg, #800020 0%, #4A0E17 100%);
+        padding: 24px 30px;
+        border-radius: 16px;
         color: #FFFFFF;
-        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
-        border: 1px solid #66101F;
+        box-shadow: 0 10px 25px rgba(128, 0, 32, 0.22);
         margin-bottom: 24px;
     }
     .header-box h1 {
         margin: 0;
-        font-size: 2.8rem;
+        font-size: 2.1rem;
         font-weight: 800;
-        color: #FFD1DC !important;
-        letter-spacing: 1px;
+        color: #FFFFFF !important;
     }
     .header-box p {
-        margin: 8px 0 0 0;
+        margin: 6px 0 0 0;
         font-size: 1.05rem;
         color: #F8D7DA;
     }
-    .alert-banner-neutral {
-        background: #1E293B;
-        border-left: 6px solid #64748B;
+    .metric-card {
+        background-color: #FFFFFF;
+        border-radius: 14px;
+        padding: 18px 20px;
+        box-shadow: 0 4px 15px rgba(128, 0, 32, 0.06);
+        border: 1px solid #F1DFE3;
+        text-align: center;
+    }
+    .metric-title {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #800020;
+        text-transform: uppercase;
+    }
+    .metric-value {
+        font-size: 1.85rem;
+        font-weight: 800;
+        color: #1A202C;
+        margin: 6px 0;
+    }
+    .metric-subtitle {
+        font-size: 0.8rem;
+        color: #718096;
+    }
+    .alert-banner-danger {
+        background: linear-gradient(135deg, #FFEBEB 0%, #FEE2E2 100%);
+        border-left: 6px solid #DC2626;
         padding: 16px 20px;
         border-radius: 12px;
-        color: #CBD5E1;
+        color: #991B1B;
+        font-weight: 700;
+        font-size: 1.1rem;
+        margin: 15px 0;
+    }
+    .alert-banner-success {
+        background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%);
+        border-left: 6px solid #059669;
+        padding: 16px 20px;
+        border-radius: 12px;
+        color: #065F46;
+        font-weight: 700;
+        font-size: 1.1rem;
+        margin: 15px 0;
+    }
+    .alert-banner-neutral {
+        background: #F3F4F6;
+        border-left: 6px solid #6B7280;
+        padding: 16px 20px;
+        border-radius: 12px;
+        color: #374151;
         font-weight: 600;
         margin: 15px 0;
-        border: 1px solid #334155;
     }
     div.stButton > button:first-child {
         background-color: #800020;
         color: #FFFFFF;
         font-weight: 600;
         border-radius: 10px;
-        border: 1px solid #A31435;
+        border: none;
         padding: 10px 24px;
     }
     div.stButton > button:first-child:hover {
-        background-color: #A31435;
+        background-color: #5C0017;
         color: #FFFFFF;
     }
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# 3. INITIALIZE SESSION STATES
-if "session_start_time" not in st.session_state:
-    st.session_state.session_start_time = time.time()
-if "pomo_start_time" not in st.session_state:
-    st.session_state.pomo_start_time = time.time()
-if "pomo_mode" not in st.session_state:
-    st.session_state.pomo_mode = "Work Sprint"
+# 3. AUDIO ALERT (JavaScript Chime)
+def play_beep_js():
+    beep_code = """
+    <script>
+    try {
+        var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        var osc = audioCtx.createOscillator();
+        var gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(659.25, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.35);
+    } catch(e) {}
+    </script>
+    """
+    st.components.v1.html(beep_code, height=0, width=0)
 
-# 4. SIDEBAR CONTROLS (Pomodoro & Night Guard)
+# 4. SIDEBAR SETTINGS
 with st.sidebar:
-    st.markdown("### ⚙️ Live Controls")
+    st.markdown("### ⚙️ System Settings")
+    distance_threshold = st.slider("📏 Max Safe Face Width", min_value=100, max_value=400, value=200, step=10, help="Triggers distance alert if face width exceeds this.")
+    sound_enabled = st.toggle("🔔 Enable Audio Alert Beeps", value=True)
+    camera_id = st.number_input("📹 Camera Device Index", min_value=0, max_value=5, value=0, step=1)
     st.markdown("---")
-    st.markdown("### 🍅 Pomodoro Engine")
-    work_duration = st.slider("Work Sprint (Mins)", 1, 45, 25) * 60
-    break_duration = st.slider("Break Duration (Mins)", 1, 15, 5) * 60
-    
-    elapsed_pomo = time.time() - st.session_state.pomo_start_time
-    current_target = work_duration if st.session_state.pomo_mode == "Work Sprint" else break_duration
-    time_left = int(current_target - elapsed_pomo)
-    
-    if time_left <= 0:
-        if st.session_state.pomo_mode == "Work Sprint":
-            st.session_state.pomo_mode = "Break"
-        else:
-            st.session_state.pomo_mode = "Work Sprint"
-        st.session_state.pomo_start_time = time.time()
-        st.rerun()
+    st.markdown("### 💡 Ergonomic Tip")
+    st.info("Sit upright with your shoulders relaxed and screen at eye level.")
 
-    mins_display = max(0, time_left // 60)
-    secs_display = max(0, time_left % 60)
-    st.metric(label=f"Mode: {st.session_state.pomo_mode}", value=f"{mins_display:02d}:{secs_display:02d}")
-    
-    if st.button("🔄 Reset Timer"):
-        st.session_state.pomo_start_time = time.time()
-        st.session_state.pomo_mode = "Work Sprint"
-        st.rerun()
-
-    st.markdown("---")
-    st.markdown("### 🌙 Night Guard")
-    bedtime_hour = st.slider("Target Bedtime", 18, 23, 22, format="%d:00 PM")
-
-# 5. HEADER & NIGHT GUARD
+# 5. HEADER
 st.markdown("""
 <div class="header-box">
     <h1>Postly</h1>
-    <p>Live Computer Vision Ergonomic & Focus Assistant</p>
+    <p>Real-Time Posture and Screen-Distance Alert System for Digital Well-Being</p>
 </div>
 """, unsafe_allow_html=True)
 
-current_hour = datetime.datetime.now().hour
-if current_hour >= bedtime_hour or current_hour <= 5:
-    st.markdown(f"""
-    <div class="alert-banner-neutral">
-        🌙 <strong>Late Night Protection Active:</strong> Past your set bedtime ({bedtime_hour}:00 PM). Consider wrapping up screen time!
-    </div>
-    """, unsafe_allow_html=True)
+col_cam, col_metrics = st.columns([1.5, 1.0], gap="medium")
 
-# 6. MAIN INTERFACE WITH FULLY AUTOMATED LIVE BROWSER STREAM & BOUNDING BOX
-col_cam, col_metrics = st.columns([1.4, 1.0], gap="medium")
+if "camera_running" not in st.session_state:
+    st.session_state.camera_running = False
+if "alert_count" not in st.session_state:
+    st.session_state.alert_count = 0
+if "session_start_time" not in st.session_state:
+    st.session_state.session_start_time = None
 
 with col_cam:
-    st.markdown("### 🎥 Live Continuous Tracker Feed")
-    st.info("💡 **Fully Automated:** Your webcam stream opens and tracks live with zero manual snapshot buttons required.")
-    
-    # Fully automated live client-side video stream with real-time indicator box
-    live_stream_html = """
-    <div style="position: relative; width: 100%; max-width: 600px; margin: auto; background: #000; border-radius: 12px; overflow: hidden; border: 2px solid #66101F;">
-        <video id="webcam" autoplay playsinline width="100%" style="display: block; transform: scaleX(-1);"></video>
-        <div id="posture-box" style="position: absolute; top: 20%; left: 25%; width: 50%; height: 60%; border: 4px solid #10B981; border-radius: 8px; box-shadow: 0 0 20px rgba(16, 185, 129, 0.6); pointer-events: none; transition: all 0.3s ease;">
-            <span id="posture-label" style="position: absolute; top: -32px; left: 0; background: #10B981; color: white; padding: 4px 10px; font-size: 13px; font-weight: bold; border-radius: 4px; white-space: nowrap; letter-spacing: 0.5px;">✅ LIVE: GOOD POSTURE</span>
-        </div>
-    </div>
-    <script>
-        const video = document.getElementById('webcam');
-        const box = document.getElementById('posture-box');
-        const label = document.getElementById('posture-label');
+    st.markdown("### 🎥 Live Ergonomic Feed")
+    b1, b2 = st.columns(2)
+    with b1:
+        if st.button("▶️ Start Webcam", use_container_width=True):
+            st.session_state.camera_running = True
+            if st.session_state.session_start_time is None:
+                st.session_state.session_start_time = time.time()
+    with b2:
+        if st.button("⏹️ Stop Webcam", use_container_width=True):
+            st.session_state.camera_running = False
 
-        // Automatically request and stream webcam feed
-        navigator.mediaDevices.getUserMedia({ video: true })
-            .then(stream => { video.srcObject = stream; })
-            .catch(err => { console.error("Webcam access error:", err); });
-
-        // Real-time status toggle demonstrating live tracking visual feedback
-        let isGood = true;
-        setInterval(() => {
-            isGood = !isGood;
-            if (isGood) {
-                box.style.borderColor = "#10B981"; // Green Box
-                box.style.boxShadow = "0 0 20px rgba(16, 185, 129, 0.6)";
-                label.style.background = "#10B981";
-                label.innerText = "✅ LIVE: GOOD POSTURE";
-            } else {
-                box.style.borderColor = "#EF4444"; // Red Box
-                box.style.boxShadow = "0 0 20px rgba(239, 68, 68, 0.6)";
-                label.style.background = "#EF4444";
-                label.innerText = "⚠️ SLOUCHING / TOO CLOSE";
-            }
-        }, 5000);
-    </script>
-    """
-    st.components.v1.html(live_stream_html, height=380)
+    camera_placeholder = st.empty()
+    if not st.session_state.camera_running:
+        camera_placeholder.info("Click **'▶️ Start Webcam'** above to begin monitoring.")
 
 with col_metrics:
-    st.markdown("### 🌸 Postly Plant Status")
-    st.success("🌸 **Your Postly Flower is Blooming!** Live tracker is running.")
+    st.markdown("### 📊 Real-Time Status & Metrics")
+    alert_placeholder = st.empty()
+    alert_placeholder.markdown('<div class="alert-banner-neutral">ℹ️ Camera is inactive. Start camera to view alerts.</div>', unsafe_allow_html=True)
+    
+    m1, m2 = st.columns(2)
+    with m1:
+        dist_metric = st.empty()
+        dist_metric.markdown('<div class="metric-card"><div class="metric-title">Face Box Size</div><div class="metric-value">-- px</div><div class="metric-subtitle">Distance metric</div></div>', unsafe_allow_html=True)
+    with m2:
+        posture_metric = st.empty()
+        posture_metric.markdown('<div class="metric-card"><div class="metric-title">Posture Status</div><div class="metric-value">Idle</div><div class="metric-subtitle">Awaiting feed</div></div>', unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.markdown("### 🤸 Guided Micro-Stretches")
-    stretches = [
-        "**Shoulder Rolls:** Roll shoulders backward 10 times.",
-        "**Neck Tilt:** Gently tilt ear to shoulder for 15s per side.",
-        "**Chest Opener:** Interlace fingers behind back and press forward.",
-        "**Eye Relaxation:** Blink rapidly for 10 seconds."
-    ]
-    if st.button("✨ Give Me a Stretch"):
-        st.info(random.choice(stretches))
+    m3, m4 = st.columns(2)
+    with m3:
+        warnings_metric = st.empty()
+        warnings_metric.markdown('<div class="metric-card"><div class="metric-title">Total Alerts</div><div class="metric-value">0</div><div class="metric-subtitle">Breaches</div></div>', unsafe_allow_html=True)
+    with m4:
+        duration_metric = st.empty()
+        duration_metric.markdown('<div class="metric-card"><div class="metric-title">Session Time</div><div class="metric-value">00:00</div><div class="metric-subtitle">Active</div></div>', unsafe_allow_html=True)
 
-# 7. SESSION SUMMARY
-st.markdown("---")
-st.markdown("### 📋 Session Summary Report")
-r1, r2, r3 = st.columns(3)
-with r1:
-    st.metric("Session Duration", f"{int(time.time() - st.session_state.session_start_time)//60} mins")
-with r2:
-    st.metric("Tracker Status", "Live Stream Active")
-with r3:
-    st.metric("Ergonomic Health Score", "95%")
+# 6. RUN WEBCAM WITH DISTANCE & POSTURE DETECTION
+if st.session_state.camera_running:
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    
+    if face_cascade.empty():
+        import urllib.request
+        url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
+        urllib.request.urlretrieve(url, "haarcascade_frontalface_default.xml")
+        face_cascade = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
+
+    cap = cv2.VideoCapture(int(camera_id))
+    
+    if not cap.isOpened() or face_cascade.empty():
+        st.error("❌ Could not open camera or load face detection model.")
+        st.session_state.camera_running = False
+    else:
+        last_beep_time = 0
+        ref_x_center = None
+        
+        while cap.isOpened() and st.session_state.camera_running:
+            success, frame = cap.read()
+            if not success:
+                break
+            
+            frame = cv2.flip(frame, 1)
+            height, width_frame, _ = frame.shape
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(50, 50))
+            
+            elapsed_sec = int(time.time() - st.session_state.session_start_time) if st.session_state.session_start_time else 0
+            mins, secs = divmod(elapsed_sec, 60)
+            time_str = f"{mins:02d}:{secs:02d}"
+
+            if len(faces) > 0:
+                (x, y, w, h) = max(faces, key=lambda f: f[2] * f[3])
+                face_center_x = x + (w // 2)
+                face_center_y = y + (h // 2)
+                
+                if ref_x_center is None:
+                    ref_x_center = face_center_x
+                
+                vertical_drift = face_center_y - (height / 2)
+                is_slumping = vertical_drift > 80
+                is_too_close = w > distance_threshold
+                
+                if is_too_close:
+                    status = "TOO CLOSE"
+                    box_color = (0, 0, 255)
+                    alert_msg = f"🚨 <strong>Warning: Too close to screen!</strong> Face width: {w}px."
+                elif is_slumping:
+                    status = "SLUMPING"
+                    box_color = (0, 140, 255)
+                    alert_msg = "⚠️ <strong>Posture Alert: Slumping detected!</strong> Sit up straight."
+                else:
+                    status = "GOOD"
+                    box_color = (0, 200, 80)
+                    alert_msg = "✅ <strong>Optimal Posture & Distance!</strong> Keep it up!"
+
+                if is_too_close or is_slumping:
+                    alert_placeholder.markdown(f'<div class="alert-banner-danger">{alert_msg}</div>', unsafe_allow_html=True)
+                    if time.time() - last_beep_time > 2.0:
+                        st.session_state.alert_count += 1
+                        if sound_enabled:
+                            play_beep_js()
+                        last_beep_time = time.time()
+                else:
+                    alert_placeholder.markdown(f'<div class="alert-banner-success">{alert_msg}</div>', unsafe_allow_html=True)
+
+                cv2.rectangle(frame, (x, y), (x+w, y+h), box_color, 2)
+                cv2.putText(frame, f"Status: {status}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, box_color, 2)
+                
+                dist_metric.markdown(f'<div class="metric-card"><div class="metric-title">Face Box Size</div><div class="metric-value">{w} px</div><div class="metric-subtitle">Threshold: {distance_threshold}px</div></div>', unsafe_allow_html=True)
+                posture_metric.markdown(f'<div class="metric-card"><div class="metric-title">Posture Status</div><div class="metric-value">{status}</div><div class="metric-subtitle">Active check</div></div>', unsafe_allow_html=True)
+            else:
+                alert_placeholder.markdown('<div class="alert-banner-neutral">🔍 <strong>Searching for face...</strong><br>Center your face in front of the camera.</div>', unsafe_allow_html=True)
+                dist_metric.markdown('<div class="metric-card"><div class="metric-title">Face Box Size</div><div class="metric-value">-- px</div><div class="metric-subtitle">No face found</div></div>', unsafe_allow_html=True)
+                posture_metric.markdown(f'<div class="metric-card"><div class="metric-title">Posture Status</div><div class="metric-value">Searching</div><div class="metric-subtitle">No face</div></div>', unsafe_allow_html=True)
+
+            warnings_metric.markdown(f'<div class="metric-card"><div class="metric-title">Total Alerts</div><div class="metric-value">{st.session_state.alert_count}</div><div class="metric-subtitle">Breaches</div></div>', unsafe_allow_html=True)
+            duration_metric.markdown(f'<div class="metric-card"><div class="metric-title">Session Time</div><div class="metric-value">{time_str}</div><div class="metric-subtitle">Active</div></div>', unsafe_allow_html=True)
+
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            camera_placeholder.image(frame_rgb, channels="RGB", use_container_width=True)
+            time.sleep(0.03)
+
+        cap.release()
