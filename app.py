@@ -13,103 +13,132 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 2. BURGUNDY THEME STYLING (CSS)
-CUSTOM_CSS = """
-<style>
-    .stApp {
-        background: linear-gradient(180deg, #FDFBFB 0%, #FAF2F4 100%);
-        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-        color: #2D3748;
-    }
-    .header-box {
-        background: linear-gradient(135deg, #800020 0%, #4A0E17 100%);
-        padding: 24px 30px;
-        border-radius: 16px;
-        color: #FFFFFF;
-        box-shadow: 0 10px 25px rgba(128, 0, 32, 0.22);
-        margin-bottom: 24px;
-    }
-    .header-box h1 {
-        margin: 0;
-        font-size: 2.1rem;
-        font-weight: 800;
-        color: #FFFFFF !important;
-    }
-    .header-box p {
-        margin: 6px 0 0 0;
-        font-size: 1.05rem;
-        color: #F8D7DA;
-    }
-    .metric-card {
-        background-color: #FFFFFF;
-        border-radius: 14px;
-        padding: 18px 20px;
-        box-shadow: 0 4px 15px rgba(128, 0, 32, 0.06);
-        border: 1px solid #F1DFE3;
-        text-align: center;
-    }
-    .metric-title {
-        font-size: 0.85rem;
-        font-weight: 600;
-        color: #800020;
-        text-transform: uppercase;
-    }
-    .metric-value {
-        font-size: 1.85rem;
-        font-weight: 800;
-        color: #1A202C;
-        margin: 6px 0;
-    }
-    .metric-subtitle {
-        font-size: 0.8rem;
-        color: #718096;
-    }
-    .alert-banner-danger {
-        background: linear-gradient(135deg, #FFEBEB 0%, #FEE2E2 100%);
-        border-left: 6px solid #DC2626;
-        padding: 16px 20px;
-        border-radius: 12px;
-        color: #991B1B;
-        font-weight: 700;
-        font-size: 1.1rem;
-        margin: 15px 0;
-    }
-    .alert-banner-success {
-        background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%);
-        border-left: 6px solid #059669;
-        padding: 16px 20px;
-        border-radius: 12px;
-        color: #065F46;
-        font-weight: 700;
-        font-size: 1.1rem;
-        margin: 15px 0;
-    }
-    .alert-banner-neutral {
-        background: #F3F4F6;
-        border-left: 6px solid #6B7280;
-        padding: 16px 20px;
-        border-radius: 12px;
-        color: #374151;
-        font-weight: 600;
-        margin: 15px 0;
-    }
-    div.stButton > button:first-child {
-        background-color: #800020;
-        color: #FFFFFF;
-        font-weight: 600;
-        border-radius: 10px;
-        border: none;
-        padding: 10px 24px;
-    }
-    div.stButton > button:first-child:hover {
-        background-color: #5C0017;
-        color: #FFFFFF;
-    }
-</style>
-"""
+# 2. THEME STATE INITIALIZATION
+if "theme_mode" not in st.session_state:
+    st.session_state.theme_mode = "Dark Burgundy"
+
+# 3. SIDEBAR SETTINGS & THEME SWITCHER
+with st.sidebar:
+    st.markdown("### 🎨 Appearance")
+    theme_choice = st.radio("Select Theme Mode", ["Dark Burgundy", "Clean Light Mode"], index=0 if st.session_state.theme_mode == "Dark Burgundy" else 1)
+    st.session_state.theme_mode = theme_choice
+    
+    st.markdown("---")
+    st.markdown("### ⚙️ System Settings")
+    # Increased default threshold so you don't have to sit far away!
+    distance_threshold = st.slider("📏 Proximity Sensitivity (Max Width)", min_value=200, max_value=600, value=420, step=10, help="Higher means you can sit closer without 'Too Close' alerts.")
+    sound_enabled = st.toggle("🔔 Enable Audio Alert Beeps", value=True)
+    camera_id = st.number_input("📹 Camera Device Index", min_value=0, max_value=5, value=0, step=1)
+    
+    st.markdown("---")
+    st.markdown("### 🍅 Pomodoro Engine")
+    work_mins = st.slider("Work Sprint (Mins)", 1, 45, 25) * 60
+    break_mins = st.slider("Break Duration (Mins)", 1, 15, 5) * 60
+
+    st.markdown("---")
+    st.markdown("### 💡 Ergonomic Tip")
+    st.info("Sit comfortably with your screen at eye level.")
+
+# 4. DYNAMIC CSS STYLING
+if st.session_state.theme_mode == "Dark Burgundy":
+    CUSTOM_CSS = """
+    <style>
+        .stApp {
+            background: linear-gradient(180deg, #1A0509 0%, #0F0205 100%);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #F7FAFC;
+        }
+        .header-box {
+            background: linear-gradient(135deg, #800020 0%, #4A0E17 100%);
+            padding: 24px 30px;
+            border-radius: 16px;
+            color: #FFFFFF;
+            box-shadow: 0 10px 25px rgba(128, 0, 32, 0.4);
+            margin-bottom: 24px;
+            border: 1px solid #A31D34;
+        }
+        .header-box h1 { margin: 0; font-size: 2.1rem; font-weight: 800; color: #FFFFFF !important; }
+        .header-box p { margin: 6px 0 0 0; font-size: 1.05rem; color: #F8D7DA; }
+        .metric-card {
+            background-color: #2D0C13;
+            border-radius: 14px;
+            padding: 18px 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            border: 1px solid #5C1D29;
+            text-align: center;
+        }
+        .metric-title { font-size: 0.85rem; font-weight: 600; color: #FF99AA; text-transform: uppercase; }
+        .metric-value { font-size: 1.85rem; font-weight: 800; color: #FFFFFF; margin: 6px 0; }
+        .metric-subtitle { font-size: 0.8rem; color: #CBD5E0; }
+        .alert-banner-danger {
+            background: linear-gradient(135deg, #4A1515 0%, #3B0A0A 100%);
+            border-left: 6px solid #EF4444;
+            padding: 16px 20px; border-radius: 12px; color: #FCA5A5; font-weight: 700; font-size: 1.1rem; margin: 15px 0;
+        }
+        .alert-banner-success {
+            background: linear-gradient(135deg, #064E3B 0%, #022C22 100%);
+            border-left: 6px solid #10B981;
+            padding: 16px 20px; border-radius: 12px; color: #A7F3D0; font-weight: 700; font-size: 1.1rem; margin: 15px 0;
+        }
+        .alert-banner-neutral {
+            background: #2D3748; border-left: 6px solid #A0AEC0; padding: 16px 20px; border-radius: 12px; color: #E2E8F0; font-weight: 600; margin: 15px 0;
+        }
+        div.stButton > button:first-child {
+            background-color: #800020; color: #FFFFFF; font-weight: 600; border-radius: 10px; border: none; padding: 10px 24px;
+        }
+        div.stButton > button:first-child:hover { background-color: #A31D34; color: #FFFFFF; }
+    </style>
+    """
+else:
+    CUSTOM_CSS = """
+    <style>
+        .stApp {
+            background: linear-gradient(180deg, #FDFBFB 0%, #FAF2F4 100%);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #2D3748;
+        }
+        .header-box {
+            background: linear-gradient(135deg, #800020 0%, #4A0E17 100%);
+            padding: 24px 30px;
+            border-radius: 16px;
+            color: #FFFFFF;
+            box-shadow: 0 10px 25px rgba(128, 0, 32, 0.22);
+            margin-bottom: 24px;
+        }
+        .header-box h1 { margin: 0; font-size: 2.1rem; font-weight: 800; color: #FFFFFF !important; }
+        .header-box p { margin: 6px 0 0 0; font-size: 1.05rem; color: #F8D7DA; }
+        .metric-card {
+            background-color: #FFFFFF;
+            border-radius: 14px;
+            padding: 18px 20px;
+            box-shadow: 0 4px 15px rgba(128, 0, 32, 0.06);
+            border: 1px solid #F1DFE3;
+            text-align: center;
+        }
+        .metric-title { font-size: 0.85rem; font-weight: 600; color: #800020; text-transform: uppercase; }
+        .metric-value { font-size: 1.85rem; font-weight: 800; color: #1A202C; margin: 6px 0; }
+        .metric-subtitle { font-size: 0.8rem; color: #718096; }
+        .alert-banner-danger {
+            background: linear-gradient(135deg, #FFEBEB 0%, #FEE2E2 100%);
+            border-left: 6px solid #DC2626; padding: 16px 20px; border-radius: 12px; color: #991B1B; font-weight: 700; font-size: 1.1rem; margin: 15px 0;
+        }
+        .alert-banner-success {
+            background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%);
+            border-left: 6px solid #059669; padding: 16px 20px; border-radius: 12px; color: #065F46; font-weight: 700; font-size: 1.1rem; margin: 15px 0;
+        }
+        .alert-banner-neutral {
+            background: #F3F4F6; border-left: 6px solid #6B7280; padding: 16px 20px; border-radius: 12px; color: #374151; font-weight: 600; margin: 15px 0;
+        }
+        div.stButton > button:first-child {
+            background-color: #800020; color: #FFFFFF; font-weight: 600; border-radius: 10px; border: none; padding: 10px 24px;
+        }
+        div.stButton > button:first-child:hover { background-color: #5C0017; color: #FFFFFF; }
+    </style>
+    """
+
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# 3. AUDIO ALERT FUNCTION (JavaScript Chime)
+# 5. AUDIO ALERT FUNCTION
 def play_beep_js():
     beep_code = """
     <script>
@@ -130,7 +159,7 @@ def play_beep_js():
     """
     st.components.v1.html(beep_code, height=0, width=0)
 
-# 4. INITIALIZE SESSION STATES
+# 6. INITIALIZE SESSION STATES
 if "camera_running" not in st.session_state:
     st.session_state.camera_running = False
 if "alert_count" not in st.session_state:
@@ -144,34 +173,18 @@ if "pomo_start_time" not in st.session_state:
 if "pomo_mode" not in st.session_state:
     st.session_state.pomo_mode = "Work Sprint"
 
-# 5. SIDEBAR SETTINGS & POMODORO CONTROLS
-with st.sidebar:
-    st.markdown("### ⚙️ System Settings")
-    distance_threshold = st.slider("📏 Max Safe Face Width", min_value=100, max_value=400, value=200, step=10, help="Triggers distance alert if face width exceeds this.")
-    sound_enabled = st.toggle("🔔 Enable Audio Alert Beeps", value=True)
-    camera_id = st.number_input("📹 Camera Device Index", min_value=0, max_value=5, value=0, step=1)
-    
-    st.markdown("---")
-    st.markdown("### 🍅 Pomodoro Engine")
-    work_mins = st.slider("Work Sprint (Mins)", 1, 45, 25) * 60
-    break_mins = st.slider("Break Duration (Mins)", 1, 15, 5) * 60
-
-    st.markdown("---")
-    st.markdown("### 💡 Ergonomic Tip")
-    st.info("Sit upright with your shoulders relaxed and screen at eye level.")
-
-# 6. HEADER
+# 7. HEADER
 st.markdown("""
 <div class="header-box">
     <h1>Postly</h1>
-    <p>Real-Time Posture, Pomodoro, and Digital Well-Being Assistant</p>
+    <p>AI Shoulder Slump & Posture Tracking Assistant</p>
 </div>
 """, unsafe_allow_html=True)
 
 col_cam, col_metrics = st.columns([1.5, 1.0], gap="medium")
 
 with col_cam:
-    st.markdown("### 🎥 Live Ergonomic Feed")
+    st.markdown("### 🎥 Live Posture & Slump Feed")
     b1, b2 = st.columns(2)
     with b1:
         if st.button("▶️ Start Webcam", use_container_width=True):
@@ -194,7 +207,7 @@ with col_metrics:
     m1, m2 = st.columns(2)
     with m1:
         dist_metric = st.empty()
-        dist_metric.markdown('<div class="metric-card"><div class="metric-title">Face Box Size</div><div class="metric-value">-- px</div><div class="metric-subtitle">Distance metric</div></div>', unsafe_allow_html=True)
+        dist_metric.markdown('<div class="metric-card"><div class="metric-title">Shoulder Span</div><div class="metric-value">-- px</div><div class="metric-subtitle">Proximity metric</div></div>', unsafe_allow_html=True)
     with m2:
         posture_metric = st.empty()
         posture_metric.markdown('<div class="metric-card"><div class="metric-title">Posture Status</div><div class="metric-value">Idle</div><div class="metric-subtitle">Awaiting feed</div></div>', unsafe_allow_html=True)
@@ -202,7 +215,7 @@ with col_metrics:
     pomo_metric_placeholder = st.empty()
     plant_metric_placeholder = st.empty()
 
-# 7. RUN WEBCAM WITH POSTURE DETECTION, POMODORO, & PLANT GAMIFICATION
+# 8. RUN WEBCAM WITH CALIBRATED POSTURE & SLUMP TRACKING
 if st.session_state.camera_running:
     xml_path = "haarcascade_frontalface_default.xml"
     if not os.path.exists(xml_path):
@@ -213,11 +226,11 @@ if st.session_state.camera_running:
     cap = cv2.VideoCapture(int(camera_id))
     
     if not cap.isOpened() or face_cascade.empty():
-        st.error("❌ Could not open camera or load face detection model.")
+        st.error("❌ Could not open camera or load detection model.")
         st.session_state.camera_running = False
     else:
         last_beep_time = 0
-        ref_x_center = None
+        baseline_y = None  # To lock in your normal posture height when you first start!
         
         while cap.isOpened() and st.session_state.camera_running:
             success, frame = cap.read()
@@ -227,14 +240,12 @@ if st.session_state.camera_running:
             frame = cv2.flip(frame, 1)
             height, width_frame, _ = frame.shape
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(50, 50))
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40))
             
-            # Session Time Calculation
             elapsed_sec = int(time.time() - st.session_state.session_start_time) if st.session_state.session_start_time else 0
             mins, secs = divmod(elapsed_sec, 60)
             time_str = f"{mins:02d}:{secs:02d}"
 
-            # Pomodoro Timer Calculation
             elapsed_pomo = time.time() - st.session_state.pomo_start_time
             target_pomo = work_mins if st.session_state.pomo_mode == "Work Sprint" else break_mins
             pomo_time_left = int(target_pomo - elapsed_pomo)
@@ -251,28 +262,37 @@ if st.session_state.camera_running:
 
             if len(faces) > 0:
                 (x, y, w, h) = max(faces, key=lambda f: f[2] * f[3])
-                face_center_x = x + (w // 2)
-                face_center_y = y + (h // 2)
                 
-                if ref_x_center is None:
-                    ref_x_center = face_center_x
+                # Dynamic shoulder mapping coordinates
+                shoulder_width = int(w * 2.2)
+                shoulder_left_x = max(10, x - int(w * 0.6))
+                shoulder_right_x = min(width_frame - 10, x + w + int(w * 0.6))
+                shoulder_y = min(height - 10, y + h + int(h * 0.7))
                 
-                vertical_drift = face_center_y - (height / 2)
-                is_slumping = vertical_drift > 80
-                is_too_close = w > distance_threshold
+                current_head_y = y + (h // 2)
+                
+                # Set baseline posture height during the first few frames you sit straight
+                if baseline_y is None:
+                    baseline_y = current_head_y
+                
+                # Slump calculation based on how much your head drops *relative to your starting upright position*
+                slump_drop = current_head_y - baseline_y
+                
+                is_too_close = shoulder_width > distance_threshold
+                is_slumping = slump_drop > 45  # Triggers if you slouch/drop down by 45+ pixels
                 
                 if is_too_close:
                     status = "TOO CLOSE"
                     box_color = (0, 0, 255)
-                    alert_msg = f"🚨 <strong>Warning: Too close to screen!</strong> Face width: {w}px."
+                    alert_msg = f"🚨 <strong>Warning: Sitting too close to screen!</strong>"
                 elif is_slumping:
-                    status = "SLUMPING"
+                    status = "SLUMPING DETECTED"
                     box_color = (0, 140, 255)
-                    alert_msg = "⚠️ <strong>Posture Alert: Slumping detected!</strong> Sit up straight."
+                    alert_msg = "⚠️ <strong>Posture Alert: Slouching/Slump detected!</strong> Sit back up."
                 else:
-                    status = "GOOD"
+                    status = "OPTIMAL POSTURE"
                     box_color = (0, 200, 80)
-                    alert_msg = "✅ <strong>Optimal Posture & Distance!</strong> Keep it up!"
+                    alert_msg = "✅ <strong>Optimal Posture & Alignment!</strong> Keep it up!"
 
                 if is_too_close or is_slumping:
                     alert_placeholder.markdown(f'<div class="alert-banner-danger">{alert_msg}</div>', unsafe_allow_html=True)
@@ -286,17 +306,20 @@ if st.session_state.camera_running:
                     alert_placeholder.markdown(f'<div class="alert-banner-success">{alert_msg}</div>', unsafe_allow_html=True)
                     st.session_state.health_score = min(100, st.session_state.health_score + 1)
 
+                # Draw Shoulder & Posture Line on Feed
                 cv2.rectangle(frame, (x, y), (x+w, y+h), box_color, 2)
-                cv2.putText(frame, f"Status: {status}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, box_color, 2)
+                cv2.circle(frame, (shoulder_left_x, shoulder_y), 8, box_color, -1)
+                cv2.circle(frame, (shoulder_right_x, shoulder_y), 8, box_color, -1)
+                cv2.line(frame, (shoulder_left_x, shoulder_y), (shoulder_right_x, shoulder_y), box_color, 3)
+                cv2.putText(frame, f"Status: {status}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, box_color, 2)
                 
-                dist_metric.markdown(f'<div class="metric-card"><div class="metric-title">Face Box Size</div><div class="metric-value">{w} px</div><div class="metric-subtitle">Threshold: {distance_threshold}px</div></div>', unsafe_allow_html=True)
-                posture_metric.markdown(f'<div class="metric-card"><div class="metric-title">Posture Status</div><div class="metric-value">{status}</div><div class="metric-subtitle">Active check</div></div>', unsafe_allow_html=True)
+                dist_metric.markdown(f'<div class="metric-card"><div class="metric-title">Shoulder Span</div><div class="metric-value">{shoulder_width} px</div><div class="metric-subtitle">Limit: {distance_threshold}px</div></div>', unsafe_allow_html=True)
+                posture_metric.markdown(f'<div class="metric-card"><div class="metric-title">Posture Status</div><div class="metric-value">{status}</div><div class="metric-subtitle">Slump drop: {int(slump_drop)}px</div></div>', unsafe_allow_html=True)
             else:
-                alert_placeholder.markdown('<div class="alert-banner-neutral">🔍 <strong>Searching for face...</strong><br>Center your face in front of the camera.</div>', unsafe_allow_html=True)
-                dist_metric.markdown(f'<div class="metric-card"><div class="metric-title">Face Box Size</div><div class="metric-value">-- px</div><div class="metric-subtitle">No face found</div></div>', unsafe_allow_html=True)
-                posture_metric.markdown(f'<div class="metric-card"><div class="metric-title">Posture Status</div><div class="metric-value">Searching</div><div class="metric-subtitle">No face</div></div>', unsafe_allow_html=True)
+                alert_placeholder.markdown('<div class="alert-banner-neutral">🔍 <strong>Searching for upper body...</strong><br>Center yourself in front of the camera.</div>', unsafe_allow_html=True)
+                dist_metric.markdown(f'<div class="metric-card"><div class="metric-title">Shoulder Span</div><div class="metric-value">-- px</div><div class="metric-subtitle">No user found</div></div>', unsafe_allow_html=True)
+                posture_metric.markdown(f'<div class="metric-card"><div class="metric-title">Posture Status</div><div class="metric-value">Searching</div><div class="metric-subtitle">No user</div></div>', unsafe_allow_html=True)
 
-            # Plant Level-Up & Flower Status calculation
             score = st.session_state.health_score
             if score >= 85:
                 plant_level = "🌸 Level 3: Blooming Flower"
@@ -314,7 +337,7 @@ if st.session_state.camera_running:
 
         cap.release()
 
-# 8. SESSION SUMMARY REPORT SECTION (Bottom)
+# 9. SESSION SUMMARY REPORT SECTION (Bottom)
 st.markdown("---")
 st.markdown("### 📋 Session Summary Report")
 r1, r2, r3 = st.columns(3)
