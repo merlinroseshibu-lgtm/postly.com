@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import streamlit as st
 import time
+import os
+import urllib.request
 
 # 1. PAGE CONFIGURATION
 st.set_page_config(
@@ -192,16 +194,14 @@ with col_metrics:
         duration_metric = st.empty()
         duration_metric.markdown('<div class="metric-card"><div class="metric-title">Session Time</div><div class="metric-value">00:00</div><div class="metric-subtitle">Active</div></div>', unsafe_allow_html=True)
 
-# 6. RUN WEBCAM WITH DISTANCE & POSTURE DETECTION
+# 6. AUTOMATICALLY DOWNLOAD CASCADE & RUN WEBCAM
 if st.session_state.camera_running:
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-    
-    if face_cascade.empty():
-        import urllib.request
+    xml_path = "haarcascade_frontalface_default.xml"
+    if not os.path.exists(xml_path):
         url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
-        urllib.request.urlretrieve(url, "haarcascade_frontalface_default.xml")
-        face_cascade = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
+        urllib.request.urlretrieve(url, xml_path)
 
+    face_cascade = cv2.CascadeClassifier(xml_path)
     cap = cv2.VideoCapture(int(camera_id))
     
     if not cap.isOpened() or face_cascade.empty():
