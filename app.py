@@ -109,7 +109,7 @@ CUSTOM_CSS = """
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# 3. AUDIO ALERT (JavaScript Chime)
+# 3. AUDIO ALERT FUNCTION (JavaScript Chime)
 def play_beep_js():
     beep_code = """
     <script>
@@ -130,32 +130,45 @@ def play_beep_js():
     """
     st.components.v1.html(beep_code, height=0, width=0)
 
-# 4. SIDEBAR SETTINGS
-with st.sidebar:
-    st.markdown("### ⚙️ System Settings")
-    distance_threshold = st.slider("📏 Max Safe Face Width", min_value=100, max_value=400, value=200, step=10, help="Triggers distance alert if face width exceeds this.")
-    sound_enabled = st.toggle("🔔 Enable Audio Alert Beeps", value=True)
-    camera_id = st.number_input("📹 Camera Device Index", min_value=0, max_value=5, value=0, step=1)
-    st.markdown("---")
-    st.markdown("### 💡 Ergonomic Tip")
-    st.info("Sit upright with your shoulders relaxed and screen at eye level.")
-
-# 5. HEADER
-st.markdown("""
-<div class="header-box">
-    <h1>Postly</h1>
-    <p>Real-Time Posture and Screen-Distance Alert System for Digital Well-Being</p>
-</div>
-""", unsafe_allow_html=True)
-
-col_cam, col_metrics = st.columns([1.5, 1.0], gap="medium")
-
+# 4. INITIALIZE SESSION STATES
 if "camera_running" not in st.session_state:
     st.session_state.camera_running = False
 if "alert_count" not in st.session_state:
     st.session_state.alert_count = 0
 if "session_start_time" not in st.session_state:
     st.session_state.session_start_time = None
+if "health_score" not in st.session_state:
+    st.session_state.health_score = 90
+if "pomo_start_time" not in st.session_state:
+    st.session_state.pomo_start_time = time.time()
+if "pomo_mode" not in st.session_state:
+    st.session_state.pomo_mode = "Work Sprint"
+
+# 5. SIDEBAR SETTINGS & POMODORO CONTROLS
+with st.sidebar:
+    st.markdown("### ⚙️ System Settings")
+    distance_threshold = st.slider("📏 Max Safe Face Width", min_value=100, max_value=400, value=200, step=10, help="Triggers distance alert if face width exceeds this.")
+    sound_enabled = st.toggle("🔔 Enable Audio Alert Beeps", value=True)
+    camera_id = st.number_input("📹 Camera Device Index", min_value=0, max_value=5, value=0, step=1)
+    
+    st.markdown("---")
+    st.markdown("### 🍅 Pomodoro Engine")
+    work_mins = st.slider("Work Sprint (Mins)", 1, 45, 25) * 60
+    break_mins = st.slider("Break Duration (Mins)", 1, 15, 5) * 60
+
+    st.markdown("---")
+    st.markdown("### 💡 Ergonomic Tip")
+    st.info("Sit upright with your shoulders relaxed and screen at eye level.")
+
+# 6. HEADER
+st.markdown("""
+<div class="header-box">
+    <h1>Postly</h1>
+    <p>Real-Time Posture, Pomodoro, and Digital Well-Being Assistant</p>
+</div>
+""", unsafe_allow_html=True)
+
+col_cam, col_metrics = st.columns([1.5, 1.0], gap="medium")
 
 with col_cam:
     st.markdown("### 🎥 Live Ergonomic Feed")
@@ -186,15 +199,10 @@ with col_metrics:
         posture_metric = st.empty()
         posture_metric.markdown('<div class="metric-card"><div class="metric-title">Posture Status</div><div class="metric-value">Idle</div><div class="metric-subtitle">Awaiting feed</div></div>', unsafe_allow_html=True)
 
-    m3, m4 = st.columns(2)
-    with m3:
-        warnings_metric = st.empty()
-        warnings_metric.markdown('<div class="metric-card"><div class="metric-title">Total Alerts</div><div class="metric-value">0</div><div class="metric-subtitle">Breaches</div></div>', unsafe_allow_html=True)
-    with m4:
-        duration_metric = st.empty()
-        duration_metric.markdown('<div class="metric-card"><div class="metric-title">Session Time</div><div class="metric-value">00:00</div><div class="metric-subtitle">Active</div></div>', unsafe_allow_html=True)
+    pomo_metric_placeholder = st.empty()
+    plant_metric_placeholder = st.empty()
 
-# 6. AUTOMATICALLY DOWNLOAD CASCADE & RUN WEBCAM
+# 7. RUN WEBCAM WITH POSTURE DETECTION, POMODORO, & PLANT GAMIFICATION
 if st.session_state.camera_running:
     xml_path = "haarcascade_frontalface_default.xml"
     if not os.path.exists(xml_path):
@@ -221,9 +229,25 @@ if st.session_state.camera_running:
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(50, 50))
             
+            # Session Time Calculation
             elapsed_sec = int(time.time() - st.session_state.session_start_time) if st.session_state.session_start_time else 0
             mins, secs = divmod(elapsed_sec, 60)
             time_str = f"{mins:02d}:{secs:02d}"
+
+            # Pomodoro Timer Calculation
+            elapsed_pomo = time.time() - st.session_state.pomo_start_time
+            target_pomo = work_mins if st.session_state.pomo_mode == "Work Sprint" else break_mins
+            pomo_time_left = int(target_pomo - elapsed_pomo)
+            
+            if pomo_time_left <= 0:
+                if st.session_state.pomo_mode == "Work Sprint":
+                    st.session_state.pomo_mode = "Break"
+                else:
+                    st.session_state.pomo_mode = "Work Sprint"
+                st.session_state.pomo_start_time = time.time()
+                pomo_time_left = work_mins if st.session_state.pomo_mode == "Work Sprint" else break_mins
+
+            pomo_mins_disp, pomo_secs_disp = divmod(max(0, pomo_time_left), 60)
 
             if len(faces) > 0:
                 (x, y, w, h) = max(faces, key=lambda f: f[2] * f[3])
@@ -252,6 +276,7 @@ if st.session_state.camera_running:
 
                 if is_too_close or is_slumping:
                     alert_placeholder.markdown(f'<div class="alert-banner-danger">{alert_msg}</div>', unsafe_allow_html=True)
+                    st.session_state.health_score = max(20, st.session_state.health_score - 1)
                     if time.time() - last_beep_time > 2.0:
                         st.session_state.alert_count += 1
                         if sound_enabled:
@@ -259,6 +284,7 @@ if st.session_state.camera_running:
                         last_beep_time = time.time()
                 else:
                     alert_placeholder.markdown(f'<div class="alert-banner-success">{alert_msg}</div>', unsafe_allow_html=True)
+                    st.session_state.health_score = min(100, st.session_state.health_score + 1)
 
                 cv2.rectangle(frame, (x, y), (x+w, y+h), box_color, 2)
                 cv2.putText(frame, f"Status: {status}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, box_color, 2)
@@ -267,14 +293,35 @@ if st.session_state.camera_running:
                 posture_metric.markdown(f'<div class="metric-card"><div class="metric-title">Posture Status</div><div class="metric-value">{status}</div><div class="metric-subtitle">Active check</div></div>', unsafe_allow_html=True)
             else:
                 alert_placeholder.markdown('<div class="alert-banner-neutral">🔍 <strong>Searching for face...</strong><br>Center your face in front of the camera.</div>', unsafe_allow_html=True)
-                dist_metric.markdown('<div class="metric-card"><div class="metric-title">Face Box Size</div><div class="metric-value">-- px</div><div class="metric-subtitle">No face found</div></div>', unsafe_allow_html=True)
+                dist_metric.markdown(f'<div class="metric-card"><div class="metric-title">Face Box Size</div><div class="metric-value">-- px</div><div class="metric-subtitle">No face found</div></div>', unsafe_allow_html=True)
                 posture_metric.markdown(f'<div class="metric-card"><div class="metric-title">Posture Status</div><div class="metric-value">Searching</div><div class="metric-subtitle">No face</div></div>', unsafe_allow_html=True)
 
-            warnings_metric.markdown(f'<div class="metric-card"><div class="metric-title">Total Alerts</div><div class="metric-value">{st.session_state.alert_count}</div><div class="metric-subtitle">Breaches</div></div>', unsafe_allow_html=True)
-            duration_metric.markdown(f'<div class="metric-card"><div class="metric-title">Session Time</div><div class="metric-value">{time_str}</div><div class="metric-subtitle">Active</div></div>', unsafe_allow_html=True)
+            # Plant Level-Up & Flower Status calculation
+            score = st.session_state.health_score
+            if score >= 85:
+                plant_level = "🌸 Level 3: Blooming Flower"
+            elif score >= 50:
+                plant_level = "🌱 Level 2: Growing Bud"
+            else:
+                plant_level = "🥀 Level 1: Wilting Sprout"
+
+            pomo_metric_placeholder.markdown(f'<div class="metric-card" style="margin-top:12px;"><div class="metric-title">🍅 Pomodoro ({st.session_state.pomo_mode})</div><div class="metric-value">{pomo_mins_disp:02d}:{pomo_secs_disp:02d}</div><div class="metric-subtitle">Active Sprint Timer</div></div>', unsafe_allow_html=True)
+            plant_metric_placeholder.markdown(f'<div class="metric-card" style="margin-top:12px;"><div class="metric-title">🌿 Postly Plant Status</div><div class="metric-value">{score}%</div><div class="metric-subtitle">{plant_level}</div></div>', unsafe_allow_html=True)
 
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             camera_placeholder.image(frame_rgb, channels="RGB", use_container_width=True)
             time.sleep(0.03)
 
         cap.release()
+
+# 8. SESSION SUMMARY REPORT SECTION (Bottom)
+st.markdown("---")
+st.markdown("### 📋 Session Summary Report")
+r1, r2, r3 = st.columns(3)
+with r1:
+    session_duration_mins = int((time.time() - st.session_state.session_start_time) // 60) if st.session_state.session_start_time else 0
+    st.metric("Total Session Time", f"{session_duration_mins} mins")
+with r2:
+    st.metric("Total Posture Alerts Caught", st.session_state.alert_count)
+with r3:
+    st.metric("Ergonomic Health Score", f"{st.session_state.health_score}%")
